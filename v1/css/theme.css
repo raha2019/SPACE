@@ -1,0 +1,34 @@
+/* ============================================================
+   GLOBAL THEME — professional dark engineering dashboard
+   ============================================================ */
+:root{
+  --bg:#0e1116;
+  --bg-2:#151a22;
+  --panel:#1a2030;
+  --panel-2:#222a3c;
+  --panel-3:#2a3346;
+  --line:#2e394f;
+  --line-2:#3a4665;
+  --text:#e6ecf5;
+  --text-dim:#9aa6bd;
+  --text-mute:#6c7892;
+  --accent:#5aa9ff;
+  --accent-2:#7cc4ff;
+  --good:#34c98a;
+  --warn:#f0b441;
+  --bad:#ef5d6f;
+  --crit:#ff3e5c;
+  --notice:#7aa0ff;
+  --r1:#3aa776;  /* risk 1 */
+  --r2:#6db15a;  /* risk 2 */
+  --r3:#e0a73a;  /* risk 3 */
+  --r4:#e87b3b;  /* risk 4 */
+  --r5:#e54848;  /* risk 5 */
+  --fixed:#9aa6bd;
+  --shadow:0 6px 18px rgba(0,0,0,.35);
+  --radius:10px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font:13px/1.45 -apple-system,BlinkMacSystemFont,"Inter","Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}
+button{font-family:inherit}
+a{color:var(--accent-2)}

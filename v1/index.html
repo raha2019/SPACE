@@ -1,0 +1,774 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Invention Studio Layout Risk Simulator</title>
+<link rel="stylesheet" href="css/theme.css">
+<link rel="stylesheet" href="css/layout.css">
+<link rel="stylesheet" href="css/components.css">
+<link rel="stylesheet" href="css/stage.css">
+</head>
+<body>
+
+<header class="app">
+  <h1><span class="accent">Invention Studio</span> Layout Risk Simulator</h1>
+  <div class="sub">Interactive prototype for evaluating safety, accessibility, congestion, and workflow risk.</div>
+  <div class="meta">
+    <span><b>Project:</b> Invention Studio Layout Optimization for Safety and Accessibility</span>
+    <span><b>Lab:</b> Georgia Tech MATRIX Lab</span>
+    <span><b>Build:</b> v0.5 prototype</span>
+  </div>
+</header>
+
+<div class="notice-banner">
+  <span>ⓘ</span>
+  <span>
+    <b>Prototype notice.</b> This simulator uses the Matterport overhead view as a visual reference. Zone labels and boundaries are preliminary and intended to test the scoring framework — they should be calibrated using on-site measurements, staff feedback, SUMS, 3DPrinterOS, and observation data. Final positions and dimensions are not exact CAD.
+  </span>
+</div>
+
+<div class="controls">
+  <div class="tabs" id="tabs">
+    <button data-preset="current" class="active">Current Layout</button>
+    <button data-preset="altA">Alternative A</button>
+    <button data-preset="altB">Alternative B</button>
+  </div>
+
+  <div class="ctrl">
+    <label for="trafficMode">Traffic Mode</label>
+    <select id="trafficMode">
+      <option value="summer">Summer</option>
+      <option value="normal" selected>Normal Semester</option>
+      <option value="peak">Peak Semester</option>
+    </select>
+  </div>
+
+  <div class="ctrl" title="Expands effective footprint of assembly tables and work zones to simulate chairs, users, carts, bins, and project materials.">
+    <span>Active Use Mode</span>
+    <div class="switch" id="activeUse"></div>
+  </div>
+
+  <div class="ctrl" title="Show clearance halos around movable zones.">
+    <span>Show Clearance Zones</span>
+    <div class="switch" id="showClearance"></div>
+  </div>
+
+  <div class="ctrl" title="Show emergency egress paths and connector corridor centerline.">
+    <span>Show Circulation</span>
+    <div class="switch on" id="showFlow"></div>
+  </div>
+
+  <div class="ctrl" title="Show or hide the Elements sidebar.">
+    <span>Show Sidebar</span>
+    <div class="switch on" id="showSidebar"></div>
+  </div>
+
+  <div class="spacer"></div>
+  <input type="file" id="importImageInput" accept="image/png,image/jpeg,image/jpg,image/svg+xml,image/webp,image/gif,.png,.jpg,.jpeg,.svg,.webp,.gif,.dxf,.dwg" style="display:none" />
+  <button class="btn ghost" id="importImageBtn" title="Replace the layout background image. Accepts PNG, JPG, SVG, WEBP, GIF (DXF/DWG require external conversion).">Import Floor Plan</button>
+  <input type="file" id="importConfigInput" accept="application/json,.json" style="display:none" />
+  <button class="btn ghost" id="importConfigBtn" title="Load a configuration file (.json) specifying a floor plan image and pixel scale.">Import Configuration</button>
+  <button class="btn ghost" id="elementBuilderBtn" title="Create custom elements with name, risk level, and default size.">Element Builder</button>
+  <button class="btn ghost" id="resetBtn">Reset Layout</button>
+  <button class="btn primary" id="exportBtn">Export Project</button>
+</div>
+
+<div id="loadedStatusWrap" class="loaded-status-wrap">
+  <!-- Floor plan row -->
+  <div id="floorPlanStatus" class="loaded-row" style="display:none">
+    <button class="lr-collapse" id="fpCollapse" title="Show/hide details">▾</button>
+    <span class="lr-label">Loaded floor plan:</span>
+    <span class="lr-name" id="fpName">—</span>
+    <span class="lr-details" id="fpDetails">
+      <span class="lr-sep">·</span>
+      <span class="lr-scale" id="fpScale">—</span>
+      <span class="lr-sep">·</span>
+      <span class="lr-dims" id="fpDims">—</span>
+    </span>
+    <button class="btn ghost lr-btn" id="fpDownload" title="Download the original imported image">⬇ Download</button>
+    <button class="btn ghost lr-btn" id="fpRecalibrate" title="Re-run the scale calibration on this floor plan">⟳ Recalibrate</button>
+    <button class="btn ghost lr-btn" id="fpClear" title="Revert to default floor plan">Clear</button>
+  </div>
+
+  <!-- Config row -->
+  <div id="configStatus" class="loaded-row" style="display:none">
+    <button class="lr-collapse" id="cfgCollapse" title="Show/hide details">▾</button>
+    <span class="lr-label">Loaded configuration:</span>
+    <span class="lr-name" id="csName">—</span>
+    <span class="lr-details" id="cfgDetails">
+      <span class="lr-sep">·</span>
+      <span class="lr-scale" id="csScale">—</span>
+      <span class="lr-sep">·</span>
+      <span class="lr-dims" id="csDims">—</span>
+    </span>
+    <button class="btn ghost lr-btn" id="cfgDownload" title="Download the original imported configuration JSON">⬇ Download</button>
+    <button class="btn ghost lr-btn" id="csClear" title="Revert to default configuration">Clear</button>
+  </div>
+</div>
+
+<div class="app-grid" id="appGrid">
+  <!-- ============== LEFT PANEL ============== -->
+  <div class="col col-left">
+    <div class="card" style="flex:1;display:flex;flex-direction:column;min-height:0">
+      <h3>Elements <span class="pill" id="elementCountPill">0</span></h3>
+      <div class="body" style="flex:1;display:flex;flex-direction:column;min-height:0">
+        <div class="elements-list" id="elementsList"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Risk Summary <span class="pill" id="presetPill">Current</span></h3>
+      <div class="body">
+        <div class="score-row">
+          <div class="score-big"><span id="overallScore">—</span><small>/100</small></div>
+          <div class="gate" id="gateBadge">—</div>
+        </div>
+        <div class="muted" style="font-size:11px;margin-top:4px">Feasibility Gate · two-step evaluation</div>
+        <div class="flag-counts">
+          <div class="fc crit"><b id="cnt-crit">0</b><span>Critical</span></div>
+          <div class="fc warn"><b id="cnt-warn">0</b><span>Warning</span></div>
+          <div class="fc notice"><b id="cnt-notice">0</b><span>Notice</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Weighted Metrics</h3>
+      <div class="body" id="metricsBody"></div>
+    </div>
+
+    <div class="card" style="flex:1;display:flex;flex-direction:column;min-height:0">
+      <h3>Flags &amp; Warnings <span class="pill" id="flagCountPill">0</span></h3>
+      <div class="body" style="flex:1;display:flex;flex-direction:column;min-height:0">
+        <div class="warn-list" id="warnList"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============== MIDDLE PANEL ============== -->
+  <div class="col">
+    <div class="card stage-card" style="flex:1">
+      <h3>
+        Layout Builder
+        <span class="calib-badge" id="calibBadge">Drag-to-calibrate</span>
+        <span class="pill" id="zoneCountPill">0 zones</span>
+      </h3>
+      <div class="stage-toolbar">
+        <div class="legend">
+          <span class="lg"><span class="sw" style="background:rgba(155,165,185,.5);border-color:rgba(220,225,235,.8)"></span>Fixed</span>
+          <span class="lg"><span class="sw" style="background:rgba(58,167,118,.5);border-color:rgba(58,167,118,.9)"></span>R1 Low</span>
+          <span class="lg"><span class="sw" style="background:rgba(109,177,90,.5);border-color:rgba(150,200,90,.9)"></span>R2 Mod</span>
+          <span class="lg"><span class="sw" style="background:rgba(224,167,58,.5);border-color:rgba(240,180,60,.95)"></span>R3 Mod-Hi</span>
+          <span class="lg"><span class="sw" style="background:rgba(232,123,59,.5);border-color:rgba(240,140,60,.95)"></span>R4 High</span>
+          <span class="lg"><span class="sw" style="background:rgba(229,72,72,.55);border-color:rgba(255,90,90,.95)"></span>R5 V.High</span>
+        </div>
+        <div class="right">
+          <span class="muted">Drag zones · <span class="kbd">Shift</span>+drag = larger step</span>
+        </div>
+      </div>
+      <div class="stage-wrap">
+        <div class="stage" id="stage">
+          <div class="floor-tint"></div>
+          <!-- Region shading injected by JS -->
+          <!-- Flow lines / corridor centerline injected by JS -->
+          <!-- Zone overlays injected by JS -->
+        </div>
+
+        <!-- Transform panel (appears when an element is selected) -->
+        <div class="transform-panel" id="transformPanel">
+          <div class="tp-hdr">
+            <span class="tp-title" id="tpTitle">—</span>
+            <button class="tp-lock" id="tpLock" title="Lock or unlock this element"></button>
+            <button class="tp-close" id="tpClose" title="Deselect">×</button>
+          </div>
+          <div id="tpContent">
+            <div class="tp-section">
+              <div class="tp-section-lbl" id="tpPosLbl">Position (% of stage)</div>
+              <div class="tp-row">
+                <div class="tp-field">
+                  <label for="tpX">X</label>
+                  <input type="number" id="tpX" step="0.5" min="0" max="100" />
+                </div>
+                <div class="tp-field">
+                  <label for="tpY">Y</label>
+                  <input type="number" id="tpY" step="0.5" min="0" max="100" />
+                </div>
+              </div>
+            </div>
+            <div class="tp-section">
+              <div class="tp-section-lbl" id="tpSizeLbl">Size (% of stage)</div>
+              <div class="tp-row">
+                <div class="tp-field">
+                  <label for="tpW">Width</label>
+                  <input type="number" id="tpW" step="0.5" min="1" max="100" />
+                </div>
+                <div class="tp-field">
+                  <label for="tpH">Height</label>
+                  <input type="number" id="tpH" step="0.5" min="1" max="100" />
+                </div>
+              </div>
+            </div>
+            <div class="tp-section">
+              <div class="tp-section-lbl">Rotation</div>
+              <div class="rot-row">
+                <input type="range" id="tpRotRange" min="-180" max="180" step="1" value="0" />
+                <span class="rot-val" id="tpRotVal">0°</span>
+              </div>
+              <div class="tp-row" style="margin-top:4px">
+                <div class="tp-field">
+                  <input type="number" id="tpRotNum" step="1" min="-360" max="360" />
+                </div>
+                <div class="tp-btn-row" style="flex:2;margin-top:0">
+                  <button class="btn ghost" data-rot="0">0°</button>
+                  <button class="btn ghost" data-rot="90">90°</button>
+                  <button class="btn ghost" data-rot="-90">-90°</button>
+                </div>
+              </div>
+            </div>
+            <div class="tp-btn-row">
+              <button class="btn ghost" id="tpResetSize" title="Restore default size">Reset Size</button>
+              <button class="btn ghost" id="tpResetRot" title="Reset rotation to 0°">Reset Rotation</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============== RIGHT PANEL ============== -->
+  <div class="col">
+    <div class="card">
+      <h3>Conclusion</h3>
+      <div class="body">
+        <div class="concl-row">
+          <div class="score-mini"><span id="conclScore">—</span><small>/100</small></div>
+          <div class="gate" id="conclGate">—</div>
+        </div>
+        <div class="concl-section">
+          <h4>Primary Failure Mode</h4>
+          <div class="failure-mode" id="primaryFail">—</div>
+        </div>
+        <div class="concl-section">
+          <h4>Status Summary</h4>
+          <p id="statusSummary">—</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Top Issues</h3>
+      <div class="body">
+        <div class="concl-section">
+          <h4>Top 3 Problems</h4>
+          <ol id="topProblems"><li class="muted">No issues detected.</li></ol>
+        </div>
+        <div class="concl-section">
+          <h4>Top 3 Recommended Fixes</h4>
+          <ol id="topFixes"><li class="muted">Layout looks acceptable.</li></ol>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Mentor Note</h3>
+      <div class="body">
+        <div class="concl-section note">
+          <p>
+            Scoring weights and warning thresholds are <b>preliminary</b> and intended for adjustment based on staff/PI feedback, Matterport measurements, SUMS, 3DPrinterOS, and future observation data.
+          </p>
+        </div>
+        <div class="concl-section" style="margin-top:8px">
+          <h4>Method</h4>
+          <p>Two-step evaluation: <b>(1)</b> feasibility checks for overlap, egress, and corridor blockage; <b>(2)</b> weighted scoring across seven layout-quality metrics, modulated by traffic and active-use mode.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     ELEMENT BUILDER MODAL
+     ============================================================ -->
+<div class="modal-backdrop" id="elementBuilderBackdrop">
+  <div class="modal wide" role="dialog" aria-labelledby="ebTitle">
+    <div class="modal-hdr">
+      <h2 id="ebTitle">Element Builder</h2>
+      <span class="mh-sub" id="ebSubtitle">Choose what to create</span>
+      <button class="mh-close" id="ebClose" title="Close">×</button>
+    </div>
+
+    <!-- ===== SCREEN: CHOOSER ===== -->
+    <div class="modal-body builder-screen" id="screenChooser" style="display:block">
+      <div class="chooser-section-hdr">Create new</div>
+      <div class="chooser-grid">
+        <div class="chooser-card" data-choice="new-tool">
+          <div class="cc-icon">⚙</div>
+          <div class="cc-title">New Tool / Workstation</div>
+          <div class="cc-desc">Multi-shape footprint, principal axis, operator zones, risk vectors, and variable attributes.</div>
+        </div>
+        <div class="chooser-card" data-choice="new-structural">
+          <div class="cc-icon">▥</div>
+          <div class="cc-title">Walls / Floor Space / Doors</div>
+          <div class="cc-desc">Architectural geometry. Defines usable floor area, blocks paths, affects clearance calculations.</div>
+        </div>
+        <div class="chooser-card" data-choice="new-amenity">
+          <div class="cc-icon">⛑</div>
+          <div class="cc-title">Safety / Amenity Item</div>
+          <div class="cc-desc">Eye-wash, shower, first aid, fire extinguisher, sand, sink, fume hood. Feeds future safety calculations.</div>
+        </div>
+        <div class="chooser-card" data-choice="import-elements">
+          <div class="cc-icon">📥</div>
+          <div class="cc-title">Import elements file</div>
+          <div class="cc-desc">Load an elements-bundle JSON. Each definition is added as an editable element placed at (0, 0); positions can then be set via Import Configuration.</div>
+        </div>
+      </div>
+      <div class="chooser-section-hdr">Edit existing</div>
+      <div class="custom-list" id="chooserExistingList"></div>
+      <input type="file" id="importElementsInput" accept="application/json,.json" style="display:none">
+    </div>
+
+    <!-- ===== SCREEN: TOOL BUILDER (existing tabs) ===== -->
+    <div class="builder-screen" id="screenTool" style="display:none">
+      <div class="modal-tabs">
+        <button class="modal-tab active" data-tab="basic">Basic</button>
+        <button class="modal-tab" data-tab="footprint">Footprint &amp; Axis</button>
+        <button class="modal-tab" data-tab="zones">Operator / Risk Zones</button>
+        <button class="modal-tab" data-tab="attrs">Variable Attributes</button>
+      </div>
+
+      <div class="modal-body">
+        <div id="ebEditBanner" class="edit-banner" style="display:none">
+          <span>✎</span>
+          <span>Editing existing element — changes will overwrite the current definition.</span>
+          <button class="eb-x" id="ebExitEdit" title="Back to chooser">×</button>
+        </div>
+
+      <!-- TAB 1: BASIC -->
+      <div class="tab-panel active" data-tab="basic">
+        <div class="form-grid">
+          <div class="form-field full">
+            <label for="ebLabel">Name (full label)</label>
+            <input type="text" id="ebLabel" placeholder="e.g. Vinyl Cutter Station" maxlength="60" />
+          </div>
+          <div class="form-field">
+            <label for="ebShort">Short Label</label>
+            <input type="text" id="ebShort" placeholder="e.g. Vinyl" maxlength="20" />
+            <div class="help-text">Shown inside the zone overlay on the stage.</div>
+          </div>
+          <div class="form-field">
+            <label for="ebRisk">Display Risk Level</label>
+            <select id="ebRisk">
+              <option value="0">0 — Fixed / N/A</option>
+              <option value="1">1 — Low</option>
+              <option value="2" selected>2 — Moderate</option>
+              <option value="3">3 — Moderate-High</option>
+              <option value="4">4 — High</option>
+              <option value="5">5 — Very High</option>
+            </select>
+            <div class="help-text">Controls the overlay color in the layout view.</div>
+          </div>
+          <div class="form-field">
+            <label for="ebOpRisk">Operation Risk (1-4)</label>
+            <select id="ebOpRisk">
+              <option value="1">1 — Minimal supervision</option>
+              <option value="2" selected>2 — Standard supervision</option>
+              <option value="3">3 — Trained users only</option>
+              <option value="4">4 — Certified / restricted</option>
+            </select>
+            <div class="help-text">Used by future tool-risk overlays and adjacency rules.</div>
+          </div>
+          <div class="form-field">
+            <label for="ebW">Bounding Width (<span class="eb-unit" id="ebWUnit">% of stage</span>)</label>
+            <input type="number" id="ebW" min="0.1" step="0.5" value="8" />
+          </div>
+          <div class="form-field">
+            <label for="ebH">Bounding Height (<span class="eb-unit" id="ebHUnit">% of stage</span>)</label>
+            <input type="number" id="ebH" min="0.1" step="0.5" value="6" />
+          </div>
+          <div class="form-field">
+            <label for="ebCat">Category (optional)</label>
+            <select id="ebCat">
+              <option value="">— Default —</option>
+              <option value="fixed">Fixed reference</option>
+              <option value="exit">Exit</option>
+              <option value="corridor">Corridor</option>
+              <option value="open">Open Area</option>
+            </select>
+          </div>
+          <div class="form-field">
+            <label for="ebBeginner">Beginner-Friendly?</label>
+            <select id="ebBeginner">
+              <option value="false">No</option>
+              <option value="true">Yes</option>
+            </select>
+          </div>
+          <div class="form-field full">
+            <label>Risk Color Preview</label>
+            <div class="risk-preview" id="ebPreview">
+              <span class="sw" id="ebPreviewSw"></span>
+              <span id="ebPreviewTxt">Choose a risk level</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 2: FOOTPRINT & AXIS -->
+      <div class="tab-panel" data-tab="footprint">
+        <p class="help-text" style="margin-top:0">
+          Compose the tool's actual 2D footprint from one or more shapes. Coordinates are <b>local</b>
+          to the bounding box (0–100% of the element's width/height). The principal axis defines the
+          <b>front face</b> — operators stand in front of it, kickback travels along it, etc.
+        </p>
+        <div class="shape-editor">
+          <div class="shape-canvas-wrap">
+            <div class="sc-hdr">Live Preview</div>
+            <svg class="shape-canvas" id="ebShapeCanvas" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet">
+              <defs>
+                <marker id="axisArrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                  <path d="M0,0 L10,5 L0,10 z" fill="#f5d76e"/>
+                </marker>
+                <marker id="kbArrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                  <path d="M0,0 L10,5 L0,10 z" fill="#ff5e6e"/>
+                </marker>
+                <marker id="matArrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                  <path d="M0,0 L10,5 L0,10 z" fill="#e8a83b"/>
+                </marker>
+              </defs>
+              <g id="ebCanvasGrid"></g>
+              <g id="ebCanvasContent"></g>
+            </svg>
+            <div style="font-size:10px;color:var(--text-mute);margin-top:6px;line-height:1.5">
+              <div><span style="display:inline-block;width:9px;height:9px;background:rgba(122,160,255,.3);border:1px solid rgba(122,160,255,.85);margin-right:5px"></span>Footprint shapes</div>
+              <div><span style="display:inline-block;width:9px;height:2px;background:#f5d76e;margin-right:5px;vertical-align:middle"></span>Principal axis (front)</div>
+              <div><span style="display:inline-block;width:9px;height:9px;background:rgba(58,167,118,.2);border:1px dashed rgba(58,167,118,.7);margin-right:5px"></span>Operator</div>
+              <div><span style="display:inline-block;width:9px;height:9px;background:rgba(122,160,255,.12);border:1px dashed rgba(122,160,255,.7);margin-right:5px"></span>Maintenance</div>
+              <div><span style="display:inline-block;width:9px;height:2px;background:#ff5e6e;margin-right:5px;vertical-align:middle"></span>Kickback</div>
+              <div><span style="display:inline-block;width:9px;height:2px;background:#e8a83b;margin-right:5px;vertical-align:middle"></span>Material loading</div>
+            </div>
+          </div>
+
+          <div>
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+              <div style="font-size:11px;letter-spacing:.4px;text-transform:uppercase;color:var(--text-mute);font-weight:600;flex:1">Shapes</div>
+            </div>
+            <div class="shape-row-headers">
+              <div>Type</div><div>X / Cx</div><div>Y / Cy</div><div>W / R</div><div>H</div><div></div>
+            </div>
+            <div class="shape-list" id="ebShapeList"></div>
+            <button class="add-shape-btn" id="ebAddShape">+ Add shape</button>
+
+            <div style="margin-top:14px;padding-top:10px;border-top:1px solid var(--line)">
+              <div style="font-size:11px;letter-spacing:.4px;text-transform:uppercase;color:var(--text-mute);font-weight:600;margin-bottom:8px">Principal Axis (front face)</div>
+              <div class="form-grid">
+                <div class="form-field">
+                  <label for="ebAxisAngle">Angle (deg)</label>
+                  <input type="number" id="ebAxisAngle" min="-180" max="180" step="5" value="0" />
+                  <div class="help-text">0° = right, 90° = down, -90° = up</div>
+                </div>
+                <div class="form-field">
+                  <label for="ebAxisLength">Length (% of bounding box)</label>
+                  <input type="number" id="ebAxisLength" min="0" max="100" step="5" value="40" />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 3: OPERATOR / RISK ZONES -->
+      <div class="tab-panel" data-tab="zones">
+        <p class="help-text" style="margin-top:0">
+          Each zone can be defined as <b>none</b>, a <b>radius</b> around the element center, a
+          <b>rectangular shape</b> (offset in any direction), or a <b>vector</b> along the
+          principal axis. Units update based on the imported floor plan scale.
+        </p>
+        <div class="shape-editor">
+          <div class="shape-canvas-wrap">
+            <div class="sc-hdr">Live Preview</div>
+            <svg class="shape-canvas" id="ebShapeCanvasZ" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet">
+              <defs>
+                <marker id="axisArrowZ" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#f5d76e"/></marker>
+                <marker id="kbArrowZ" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#ff5e6e"/></marker>
+                <marker id="matArrowZ" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e8a83b"/></marker>
+              </defs>
+              <g id="ebCanvasGridZ"></g>
+              <g id="ebCanvasContentZ"></g>
+            </svg>
+            <div style="font-size:10px;color:var(--text-mute);margin-top:6px;line-height:1.5">
+              <div><span style="display:inline-block;width:9px;height:9px;background:rgba(122,160,255,.3);border:1px solid rgba(122,160,255,.85);margin-right:5px"></span>Footprint shapes</div>
+              <div><span style="display:inline-block;width:9px;height:2px;background:#f5d76e;margin-right:5px;vertical-align:middle"></span>Principal axis (front)</div>
+              <div><span style="display:inline-block;width:9px;height:9px;background:rgba(58,167,118,.2);border:1px dashed rgba(58,167,118,.7);margin-right:5px"></span>Operator</div>
+              <div><span style="display:inline-block;width:9px;height:9px;background:rgba(122,160,255,.12);border:1px dashed rgba(122,160,255,.7);margin-right:5px"></span>Maintenance</div>
+              <div><span style="display:inline-block;width:9px;height:2px;background:#ff5e6e;margin-right:5px;vertical-align:middle"></span>Kickback</div>
+              <div><span style="display:inline-block;width:9px;height:2px;background:#e8a83b;margin-right:5px;vertical-align:middle"></span>Material loading</div>
+            </div>
+          </div>
+
+          <div>
+        <div class="rz-block" id="rzOperator">
+          <div class="rz-hdr">
+            <span class="rz-swatch" style="background:rgba(58,167,118,.85)"></span>
+            <span class="rz-title">Operator Footprint</span>
+            <select class="rz-type" data-zone="operator">
+              <option value="none">None</option>
+              <option value="radius">Radius</option>
+              <option value="shape">Rectangle</option>
+              <option value="vector">Vector (along axis)</option>
+            </select>
+          </div>
+          <div class="rz-help">Where the operator stands during normal use — usually in front of the principal axis.</div>
+          <div class="rz-params" data-zone-params="operator"></div>
+        </div>
+
+        <div class="rz-block" id="rzMaintenance">
+          <div class="rz-hdr">
+            <span class="rz-swatch" style="background:rgba(122,160,255,.85)"></span>
+            <span class="rz-title">Maintenance Footprint</span>
+            <select class="rz-type" data-zone="maintenance">
+              <option value="none">None</option>
+              <option value="radius">Radius</option>
+              <option value="shape">Rectangle</option>
+              <option value="vector">Vector (along axis)</option>
+            </select>
+          </div>
+          <div class="rz-help">Clearance required to access filters, panels, replace consumables, etc.</div>
+          <div class="rz-params" data-zone-params="maintenance"></div>
+        </div>
+
+        <div class="rz-block" id="rzKickback">
+          <div class="rz-hdr">
+            <span class="rz-swatch" style="background:#ff5e6e"></span>
+            <span class="rz-title">Kickback / Risk-of-Injury Vector</span>
+            <select class="rz-type" data-zone="kickback">
+              <option value="none">None</option>
+              <option value="radius">Radius (omnidirectional risk)</option>
+              <option value="shape">Rectangle</option>
+              <option value="vector">Vector (directional)</option>
+            </select>
+          </div>
+          <div class="rz-help">Path injury hazards could travel — e.g. wood kickback from a table saw, hot sparks from a grinder.</div>
+          <div class="rz-params" data-zone-params="kickback"></div>
+        </div>
+
+        <div class="rz-block" id="rzMaterial">
+          <div class="rz-hdr">
+            <span class="rz-swatch" style="background:#e8a83b"></span>
+            <span class="rz-title">Material Loading / Queuing Vector</span>
+            <select class="rz-type" data-zone="material">
+              <option value="none">None</option>
+              <option value="radius">Radius</option>
+              <option value="shape">Rectangle</option>
+              <option value="vector">Vector (along axis)</option>
+            </select>
+          </div>
+          <div class="rz-help">Clearance needed to feed stock in or stage materials (e.g. long stock for a horizontal bandsaw).</div>
+          <div class="rz-params" data-zone-params="material"></div>
+        </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 4: VARIABLE ATTRIBUTES -->
+      <div class="tab-panel" data-tab="attrs">
+        <p class="help-text" style="margin-top:0">
+          These attributes don't affect the visual layout directly — they'll feed future custom maps
+          (a flammability heatmap, a noise contour, etc.) and adjacency rules.
+        </p>
+        <div class="var-attrs">
+          <div class="va-field">
+            <label for="ebFlam">Risk of Flammability</label>
+            <select id="ebFlam">
+              <option value="0">0 — None</option>
+              <option value="1">1 — Low</option>
+              <option value="2" selected>2 — Moderate</option>
+              <option value="3">3 — High</option>
+              <option value="4">4 — Very High (open flame / sparks)</option>
+            </select>
+            <div class="va-help">Sparks, hot work, solvents, etc.</div>
+          </div>
+          <div class="va-field">
+            <label for="ebCollat">Collateral Damage if Accident</label>
+            <select id="ebCollat">
+              <option value="0">0 — Minimal</option>
+              <option value="1">1 — Local (operator only)</option>
+              <option value="2" selected>2 — Adjacent stations affected</option>
+              <option value="3">3 — Whole shop affected</option>
+              <option value="4">4 — Facility-wide</option>
+            </select>
+            <div class="va-help">Worst-case extent if something goes wrong.</div>
+          </div>
+          <div class="va-field">
+            <label for="ebMaintFreq">Cleaning / Maintenance Frequency</label>
+            <select id="ebMaintFreq">
+              <option value="daily">Daily</option>
+              <option value="weekly" selected>Weekly</option>
+              <option value="monthly">Monthly</option>
+              <option value="quarterly">Quarterly</option>
+              <option value="yearly">Yearly</option>
+            </select>
+            <div class="va-help">How often the tool needs cleaning, calibration, or filter changes.</div>
+          </div>
+          <div class="va-field">
+            <label for="ebNoise">Noise (dB)</label>
+            <input type="number" id="ebNoise" min="0" max="140" step="1" value="60" />
+            <div class="va-help">Approximate sound pressure at 1 m during operation. 85+ dB requires hearing protection.</div>
+          </div>
+          <div class="va-field">
+            <label for="ebSmell">Smell / Fumes</label>
+            <select id="ebSmell">
+              <option value="0">0 — None</option>
+              <option value="1" selected>1 — Mild (dust)</option>
+              <option value="2">2 — Noticeable (solvent / resin)</option>
+              <option value="3">3 — Strong (requires ventilation)</option>
+              <option value="4">4 — Requires fume hood / external exhaust</option>
+            </select>
+            <div class="va-help">Drives ventilation and isolation requirements.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 5 REMOVED — existing-list now lives on the chooser screen -->
+    </div>
+    </div><!-- /screenTool -->
+
+    <!-- ===== SCREEN: STRUCTURAL BUILDER (walls / floor / doors) ===== -->
+    <div class="builder-screen" id="screenStructural" style="display:none">
+      <div class="modal-body">
+        <div class="form-grid" style="margin-bottom:10px">
+          <div class="form-field">
+            <label for="sbType">Structural Type</label>
+            <select id="sbType">
+              <option value="wall">Wall</option>
+              <option value="floor">Floor Space</option>
+              <option value="door">Door</option>
+            </select>
+          </div>
+          <div class="form-field">
+            <label for="sbLabel">Name</label>
+            <input type="text" id="sbLabel" placeholder="e.g. North Wall" maxlength="60" />
+          </div>
+          <div class="form-field" id="sbFloorWallToggleField" style="display:none">
+            <label for="sbCountWalls">Floor Space — count walls?</label>
+            <select id="sbCountWalls">
+              <option value="false" selected>No — walls excluded from area</option>
+              <option value="true">Yes — walls included in area</option>
+            </select>
+          </div>
+          <div class="form-field" id="sbDoorSwingField" style="display:none">
+            <label for="sbDoorSwing">Door swing direction (deg)</label>
+            <input type="number" id="sbDoorSwing" min="-180" max="180" step="15" value="90" />
+          </div>
+        </div>
+
+        <div class="struct-section">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+            <div style="font-size:11px;letter-spacing:.4px;text-transform:uppercase;color:var(--text-mute);font-weight:600;flex:1">Shapes (overlapping = single uniform area)</div>
+          </div>
+          <div class="shape-row-headers">
+            <div>Type</div><div>X / Cx</div><div>Y / Cy</div><div>W / R</div><div>H</div><div></div>
+          </div>
+          <div class="struct-shapes-list" id="sbShapesList"></div>
+          <button class="add-shape-btn" id="sbAddShape">+ Add shape</button>
+        </div>
+
+        <div class="struct-canvas-wrap">
+          <div style="font-size:10px;letter-spacing:.5px;text-transform:uppercase;color:var(--text-mute);margin-bottom:6px;font-weight:600">Live preview — dashed outline shows merged extent</div>
+          <svg class="struct-canvas" id="sbCanvas" viewBox="0 0 160 100" preserveAspectRatio="xMidYMid meet">
+            <g id="sbCanvasGrid"></g>
+            <g id="sbCanvasContent"></g>
+          </svg>
+          <div class="dim-summary" id="sbDimSummary">
+            <span>Footprint extent: <b id="sbDimExt">—</b></span>
+            <span>Merged area: <b id="sbDimArea">—</b></span>
+            <span>Shapes: <b id="sbDimCount">0</b></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== SCREEN: AMENITY BUILDER (eyewash / fire ext / etc.) ===== -->
+    <div class="builder-screen" id="screenAmenity" style="display:none">
+      <div class="modal-body">
+        <div style="font-size:11px;letter-spacing:.4px;text-transform:uppercase;color:var(--text-mute);font-weight:600;margin-bottom:6px">Pick a safety / amenity type</div>
+        <div class="amenity-subtypes" id="amSubtypeGrid"></div>
+
+        <div class="form-grid" style="margin-top:14px">
+          <div class="form-field full">
+            <label for="amLabel">Name (override default)</label>
+            <input type="text" id="amLabel" placeholder="e.g. Eye-Wash by Welding Bay" maxlength="60" />
+          </div>
+          <div class="form-field">
+            <label for="amSize">Marker size (<span class="eb-unit" id="amSizeUnit">% of stage</span>)</label>
+            <input type="number" id="amSize" min="0.1" step="0.5" value="3" />
+          </div>
+          <div class="form-field">
+            <label for="amCoverage">Coverage radius (<span class="eb-unit" id="amCoverageUnit">% of stage</span>)</label>
+            <input type="number" id="amCoverage" min="0" step="0.5" value="15" />
+            <div class="help-text" id="amCoverageHelp">Distance this amenity is effective within.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-ftr">
+      <button class="btn ghost" id="ebBack" style="display:none">← Back to chooser</button>
+      <button class="btn ghost" id="ebCancel">Close</button>
+      <button class="btn primary" id="ebSave" style="display:none">Add Element</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     SCALE CALIBRATION MODAL
+     ============================================================ -->
+<div class="modal-backdrop" id="calibrationBackdrop">
+  <div class="modal cal" role="dialog" aria-labelledby="calTitle">
+    <div class="modal-hdr">
+      <h2 id="calTitle">Set Scale</h2>
+      <span class="mh-sub">Draw a line and tell me how long it is in the real world</span>
+      <button class="mh-close" id="calClose" title="Close">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="cal-instructions">
+        <b>1.</b> Click two points on the image (e.g. a known door width, a printed scale bar, or wall length).
+        &nbsp; <b>2.</b> Enter the real-world distance and unit. &nbsp; <b>3.</b> Click <b>Confirm</b>.
+      </div>
+      <div class="cal-canvas-wrap" id="calCanvasWrap">
+        <img id="calImage" class="cal-canvas" alt="Floor plan preview" />
+        <svg id="calOverlay" class="cal-svg" viewBox="0 0 100 100" preserveAspectRatio="none"></svg>
+      </div>
+      <div class="cal-controls">
+        <div class="cal-status" id="calStatus">Click point 1 on the image.</div>
+        <div class="cal-field">
+          <label for="calDistance">Real distance</label>
+          <input type="number" id="calDistance" min="0" step="0.1" value="1" />
+        </div>
+        <div class="cal-field">
+          <label for="calUnit">Unit</label>
+          <select id="calUnit">
+            <option value="ft">feet (ft)</option>
+            <option value="m">meters (m)</option>
+          </select>
+        </div>
+        <button class="btn ghost" id="calClear" title="Clear the line and start over">Clear</button>
+        <button class="btn ghost" id="calSkip" title="Import without setting a scale">Skip — no scale</button>
+      </div>
+    </div>
+    <div class="modal-ftr">
+      <button class="btn primary" id="calConfirm" disabled>Confirm Scale</button>
+    </div>
+  </div>
+</div>
+
+
+
+<script src="js/data.js"></script>
+<script src="js/state.js"></script>
+<script src="js/scoring.js"></script>
+<script src="js/render.js"></script>
+<script src="js/modals.js"></script>
+<script src="js/controls.js"></script>
+<script src="js/init.js"></script>
+</body>
+</html>
