@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>SPACE Module Tests</title>
+<style>
+  body { font-family: monospace; background: #12151c; color: #c8ccd4; padding: 24px; margin: 0; }
+  h1 { color: #a8b4c4; font-size: 16px; margin-bottom: 16px; }
+  .summary { font-size: 14px; font-weight: bold; margin-bottom: 12px; padding: 8px 12px; background: #1c2230; border-radius: 4px; }
+  .test-row { display: flex; gap: 12px; align-items: baseline; padding: 4px 0; border-bottom: 1px solid #202636; font-size: 12px; }
+  .test-row.pass .status { color: #3ab976; }
+  .test-row.fail .status { color: #e04848; }
+  .status { font-weight: bold; width: 36px; flex-shrink: 0; }
+  .detail { color: #888; font-size: 11px; flex-shrink: 0; }
+  .notice { font-size: 11px; color: #888; margin-bottom: 16px; padding: 8px; background: #1a1e2a; border-radius: 4px; }
+</style>
+</head>
+<body>
+<h1>SPACE Simulation Module Tests</h1>
+<div class="notice">
+  These tests run the simulation module functions against stub state in isolation.
+  They do not require a floor plan image or calibrated scale.
+  Open this file directly in a browser (no server required).
+</div>
+<div id="results">Loading...</div>
+
+<!-- Simulation modules (no framework, no bundler, global scope) -->
+<script src="../v1/js/sim_ada.js"></script>
+<script src="../v1/js/sim_egress.js"></script>
+<script src="../v1/js/sim_noise.js"></script>
+
+<!-- Stub out sim_ui.js functions that the modules do not need in tests -->
+<script>
+function simGetCanvas() { return document.createElement("canvas"); }
+function simShowError() {}
+function simShowAdaResults() {}
+function simShowEgressResults() {}
+function simShowNoiseResults() {}
+</script>
+
+<!-- Test suite (defines its own state stubs, then runs tests) -->
+<script src="tests.js"></script>
+</body>
+</html>

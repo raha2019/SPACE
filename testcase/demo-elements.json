@@ -1,0 +1,229 @@
+{
+  "kind": "elements-bundle",
+  "name": "GT Invention Studio Demo (80 ft x 50 ft)",
+  "description": "Demo element bundle for ADA, egress, and noise simulation testing. Includes dba_active (machine sound level), schedule_prob (fraction of time active), and accessible flags. INTENTIONAL ADA VIOLATION: CNC and Laser are spaced 2 ft apart (below the 3 ft minimum). Import via Element Builder, then load demo-configuration.json. Calibrate scale to 80 ft x 50 ft for simulations to work.",
+  "elementDefs": [
+    {
+      "id": "entrance",
+      "label": "Entrance",
+      "short": "Entrance",
+      "risk": 0,
+      "fixed": true,
+      "cat": "fixed",
+      "w": 5,
+      "h": 24
+    },
+    {
+      "id": "mainDesk",
+      "label": "Main Desk",
+      "short": "Main Desk",
+      "risk": 1,
+      "fixed": true,
+      "cat": "fixed",
+      "beginner": true,
+      "dba_active": 52,
+      "schedule_prob": 1.0,
+      "w": 11,
+      "h": 24
+    },
+    {
+      "id": "exitN",
+      "label": "Emergency Exit North",
+      "short": "Exit N",
+      "risk": 0,
+      "fixed": true,
+      "cat": "exit",
+      "w": 6,
+      "h": 14
+    },
+    {
+      "id": "exitS",
+      "label": "Emergency Exit South",
+      "short": "Exit S",
+      "risk": 0,
+      "fixed": true,
+      "cat": "exit",
+      "w": 6,
+      "h": 14
+    },
+    {
+      "id": "welding",
+      "label": "Welding",
+      "short": "Welding",
+      "risk": 5,
+      "dba_active": 95,
+      "schedule_prob": 0.3,
+      "w": 11,
+      "h": 26
+    },
+    {
+      "id": "waterjet",
+      "label": "Waterjet",
+      "short": "Waterjet",
+      "risk": 5,
+      "dba_active": 90,
+      "schedule_prob": 0.4,
+      "w": 11,
+      "h": 26
+    },
+    {
+      "id": "metal",
+      "label": "Metal Room",
+      "short": "Metal",
+      "risk": 4,
+      "dba_active": 88,
+      "schedule_prob": 0.5,
+      "w": 12,
+      "h": 26
+    },
+    {
+      "id": "cnc",
+      "label": "CNC",
+      "short": "CNC",
+      "risk": 4,
+      "dba_active": 88,
+      "schedule_prob": 0.5,
+      "w": 12,
+      "h": 26
+    },
+    {
+      "id": "laser",
+      "label": "Laser Cutting",
+      "short": "Laser",
+      "risk": 4,
+      "dba_active": 72,
+      "schedule_prob": 0.6,
+      "w": 11,
+      "h": 22
+    },
+    {
+      "id": "print3d",
+      "label": "3D Printing",
+      "short": "3D Print",
+      "risk": 3,
+      "dba_active": 55,
+      "schedule_prob": 0.8,
+      "w": 9,
+      "h": 22
+    },
+    {
+      "id": "asm1",
+      "label": "Assembly Tables 1",
+      "short": "Assembly 1",
+      "risk": 2,
+      "beginner": true,
+      "accessible": true,
+      "dba_active": 62,
+      "schedule_prob": 0.7,
+      "w": 14,
+      "h": 22
+    },
+    {
+      "id": "asm2",
+      "label": "Assembly Tables 2",
+      "short": "Assembly 2",
+      "risk": 2,
+      "beginner": true,
+      "accessible": true,
+      "dba_active": 62,
+      "schedule_prob": 0.7,
+      "w": 14,
+      "h": 22
+    },
+    {
+      "id": "wood",
+      "label": "Wood Room",
+      "short": "Wood",
+      "risk": 4,
+      "dba_active": 95,
+      "schedule_prob": 0.4,
+      "w": 12,
+      "h": 22
+    },
+    {
+      "id": "storage",
+      "label": "Storage",
+      "short": "Storage",
+      "risk": 2,
+      "w": 10,
+      "h": 22
+    },
+    {
+      "id": "electronics",
+      "label": "Electronics / Soldering",
+      "short": "Electronics",
+      "risk": 3,
+      "accessible": true,
+      "dba_active": 65,
+      "schedule_prob": 0.5,
+      "w": 11,
+      "h": 22
+    },
+    {
+      "id": "craftland",
+      "label": "Craftland",
+      "short": "Craftland",
+      "risk": 1,
+      "beginner": true,
+      "dba_active": 62,
+      "schedule_prob": 0.5,
+      "w": 11,
+      "h": 22
+    },
+    {
+      "id": "xr",
+      "label": "XR",
+      "short": "XR",
+      "risk": 1,
+      "beginner": true,
+      "dba_active": 45,
+      "schedule_prob": 0.4,
+      "w": 9,
+      "h": 22
+    },
+    {
+      "id": "bike",
+      "label": "Bike / Mechanical",
+      "short": "Bike",
+      "risk": 2,
+      "dba_active": 75,
+      "schedule_prob": 0.4,
+      "w": 11,
+      "h": 22
+    },
+    {
+      "id": "corridor",
+      "label": "Main Corridor",
+      "short": "Corridor",
+      "risk": 0,
+      "cat": "corridor",
+      "w": 70,
+      "h": 10
+    },
+    {
+      "id": "connector",
+      "label": "Connector Corridor",
+      "short": "Connector",
+      "risk": 0,
+      "cat": "corridor",
+      "w": 6,
+      "h": 84
+    },
+    {
+      "id": "rightOpen",
+      "label": "Right-Side Open Area",
+      "short": "Open Area",
+      "risk": 0,
+      "cat": "open",
+      "w": 14,
+      "h": 84
+    }
+  ],
+  "regions": [
+    { "label": "Heavy Fabrication",  "x":  1, "y": 1,  "w": 52, "h": 30, "color": "rgba(229,72,72,.04)" },
+    { "label": "Assembly / Digital", "x":  1, "y": 28, "w": 67, "h": 28, "color": "rgba(90,169,255,.04)" },
+    { "label": "Main Corridor",      "x":  1, "y": 52, "w": 72, "h": 12, "color": "rgba(240,180,65,.05)" },
+    { "label": "Beginner / Open",    "x":  1, "y": 62, "w": 72, "h": 28, "color": "rgba(58,167,118,.04)" },
+    { "label": "Right Open Zone",    "x": 75, "y": 1,  "w": 23, "h": 97, "color": "rgba(58,167,118,.04)" }
+  ]
+}

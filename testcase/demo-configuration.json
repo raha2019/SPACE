@@ -1,0 +1,37 @@
+{
+  "kind": "configuration",
+  "name": "Demo Configuration (80 ft x 50 ft)",
+  "description": "Position bindings for the 21 demo elements. Designed for an 80 ft x 50 ft space calibrated at 20 px/ft (default 1600x994 px stage). Import AFTER (1) Import Floor Plan and (2) Import Elements via Element Builder. Then open Scale Calibration and set 80 ft x 50 ft. ADA check will flag the intentional 2 ft gap between CNC and Laser (ADA minimum is 3 ft).",
+  "notes": {
+    "ada_violation": "CNC right edge x=51%, Laser left edge x=53.5%. Gap: 2.5% of 80 ft stage = 2.0 ft. ADA minimum corridor width is 3 ft (36 in). Flagged as red in the ADA overlay.",
+    "noise_sources": "Welding (95 dBA), Waterjet (90 dBA), Metal and CNC (88 dBA each), Wood (95 dBA), Laser (72 dBA) are the primary noise contributors at their respective schedule_prob values.",
+    "egress": "Two exits (North and South) on the right wall. BFS travel from any floor cell should not exceed 200 ft (NFPA 101 sprinklered industrial limit). South exit added to ensure coverage of bottom equipment row."
+  },
+  "zones": {
+    "entrance":    {"x": 0,    "y": 36},
+    "mainDesk":    {"x": 5,    "y": 36},
+    "exitN":       {"x": 90,   "y": 2},
+    "exitS":       {"x": 90,   "y": 84},
+
+    "welding":     {"x": 2,    "y": 2},
+    "waterjet":    {"x": 14,   "y": 2},
+    "metal":       {"x": 26,   "y": 2},
+    "cnc":         {"x": 39,   "y": 2},
+    "laser":       {"x": 53.5, "y": 2},
+    "print3d":     {"x": 65,   "y": 2},
+
+    "asm1":        {"x": 2,    "y": 30},
+    "asm2":        {"x": 17,   "y": 30},
+    "wood":        {"x": 32,   "y": 30},
+    "storage":     {"x": 45,   "y": 30},
+    "electronics": {"x": 56,   "y": 30},
+
+    "craftland":   {"x": 2,    "y": 66},
+    "xr":          {"x": 14,   "y": 66},
+    "bike":        {"x": 24,   "y": 66},
+
+    "corridor":    {"x": 2,    "y": 54, "w": 70, "h": 10},
+    "connector":   {"x": 75,   "y": 2,  "w": 6,  "h": 84},
+    "rightOpen":   {"x": 82,   "y": 2,  "w": 14, "h": 84}
+  }
+}

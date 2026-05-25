@@ -692,7 +692,7 @@ function saveCustomElement(){
     };
   }
   evaluate(); render();
-  renderCustomElementList();
+  renderChooserExisting();
   closeElementBuilder();
 }
 
@@ -753,7 +753,7 @@ function deleteCustomElement(id){
     closeElementBuilder();
   } else {
     evaluate(); render();
-    renderCustomElementList();
+    renderChooserExisting();
   }
 }
 
@@ -815,7 +815,7 @@ function renderStructuralShapeList(){
         '<input type="number" min="0" max="100" step="0.5" value="'+sh.y+'" data-idx="'+i+'" data-k="y" />' +
         '<input type="number" min="0.5" max="100" step="0.5" value="'+sh.w+'" data-idx="'+i+'" data-k="w" />' +
         '<input type="number" min="0.5" max="100" step="0.5" value="'+sh.h+'" data-idx="'+i+'" data-k="h" />' +
-        '<button class="sr-del" data-idx="'+i+'" title="Remove">x</button>';
+        '<button class="sr-del" data-idx="'+i+'" title="Remove">&times;</button>';
     } else {
       row.innerHTML =
         '<select data-idx="'+i+'" data-k="type">' +
@@ -826,7 +826,7 @@ function renderStructuralShapeList(){
         '<input type="number" min="0" max="100" step="0.5" value="'+sh.y+'" data-idx="'+i+'" data-k="y" title="Center Y" />' +
         '<input type="number" min="0.5" max="50" step="0.5" value="'+(sh.radius || 5)+'" data-idx="'+i+'" data-k="radius" title="Radius" />' +
         '<span class="sr-label" style="text-align:center;align-self:center">-</span>' +
-        '<button class="sr-del" data-idx="'+i+'" title="Remove">x</button>';
+        '<button class="sr-del" data-idx="'+i+'" title="Remove">&times;</button>';
     }
     listEl.appendChild(row);
   });

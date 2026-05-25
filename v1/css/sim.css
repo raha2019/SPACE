@@ -1,0 +1,97 @@
+/* Simulation module styles */
+
+/* Controls bar simulation button group */
+.sim-ctrl-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 6px;
+  border-left: 1px solid var(--line);
+}
+.sim-ctrl-group .btn.sim-active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+/* Results card body */
+.sim-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+.sim-title {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text);
+}
+.sim-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 3px;
+  letter-spacing: 0.04em;
+  background: var(--bg-2);
+  color: var(--text);
+}
+.sim-badge.sim-pass { background: var(--good);  color: #fff; }
+.sim-badge.sim-warn { background: var(--warn);  color: #fff; }
+.sim-badge.sim-fail { background: var(--bad);   color: #fff; }
+
+.sim-disclaimer {
+  font-size: 10px;
+  color: var(--text);
+  opacity: 0.55;
+  margin-bottom: 8px;
+}
+
+.sim-section {
+  margin-bottom: 8px;
+}
+
+.sim-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  padding: 3px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 11px;
+}
+.sim-row:last-child { border-bottom: none; }
+.sim-row span { color: var(--text); opacity: 0.8; flex: 1; }
+.sim-row b    { white-space: nowrap; }
+
+.sim-list {
+  margin: 4px 0 0 16px;
+  padding: 0;
+  font-size: 11px;
+  color: var(--bad);
+}
+.sim-list li { margin-bottom: 2px; }
+
+.sim-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 10px;
+  margin-top: 6px;
+  color: var(--text);
+  opacity: 0.75;
+  align-items: center;
+}
+.sim-swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  vertical-align: middle;
+}
+
+.sim-error {
+  font-size: 11px;
+  color: var(--warn);
+  padding: 4px 0;
+  line-height: 1.5;
+}

@@ -7,6 +7,7 @@ function init(){
   wireCalibrationModal();
   wireTransformPanel();
   wireElementBuilder();
+  wireSimulations();
   applySidebarVisibility();
   refreshStatusBars();
   evaluate();

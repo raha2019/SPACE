@@ -8,6 +8,7 @@
 <link rel="stylesheet" href="css/layout.css">
 <link rel="stylesheet" href="css/components.css">
 <link rel="stylesheet" href="css/stage.css">
+<link rel="stylesheet" href="css/sim.css">
 </head>
 <body>
 
@@ -62,6 +63,13 @@
   <div class="ctrl" title="Show or hide the Elements sidebar.">
     <span>Show Sidebar</span>
     <div class="switch on" id="showSidebar"></div>
+  </div>
+
+  <div class="sim-ctrl-group" title="Run a simulation overlay on the current layout. Requires a calibrated floor plan scale.">
+    <button class="btn ghost" id="simAdaBtn" title="ADA accessibility corridor and door check">ADA Check</button>
+    <button class="btn ghost" id="simEgressBtn" title="NFPA 101 egress travel distance and exit capacity">Egress</button>
+    <button class="btn ghost" id="simNoiseBtn" title="Monte Carlo noise map (requires dba_active on zones)">Noise</button>
+    <button class="btn ghost" id="simClearBtn" title="Clear the simulation overlay" disabled>Clear</button>
   </div>
 
   <div class="spacer"></div>
@@ -143,6 +151,11 @@
       <div class="body" style="flex:1;display:flex;flex-direction:column;min-height:0">
         <div class="warn-list" id="warnList"></div>
       </div>
+    </div>
+
+    <div class="card" id="simResultsCard" style="display:none">
+      <h3>Simulation Results</h3>
+      <div class="body" id="simResults"></div>
     </div>
   </div>
 
@@ -769,6 +782,10 @@
 <script src="js/render.js"></script>
 <script src="js/modals.js"></script>
 <script src="js/controls.js"></script>
+<script src="js/sim_ada.js"></script>
+<script src="js/sim_egress.js"></script>
+<script src="js/sim_noise.js"></script>
+<script src="js/sim_ui.js"></script>
 <script src="js/init.js"></script>
 </body>
 </html>

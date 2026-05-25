@@ -215,10 +215,14 @@ function drawRiskZone(svg, zone, cls, axisAngle, uid){
     r.setAttribute("y", 50 - h/2);
     r.setAttribute("width", w);
     r.setAttribute("height", h);
-    if(zone.offset){
-      const ang = axisAngle * Math.PI/180;
-      const dx = Math.cos(ang) * zone.offset;
-      const dy = Math.sin(ang) * zone.offset;
+    // Support both legacy scalar `offset` (old builder API) and the
+    // current builder API which saves separate `offsetX` / `offsetY`.
+    const hasOffset = zone.offsetX !== undefined || zone.offsetY !== undefined || zone.offset !== undefined;
+    if(hasOffset){
+      const dx = zone.offsetX !== undefined ? zone.offsetX
+               : (zone.offset !== undefined ? (Math.cos(axisAngle * Math.PI/180) * zone.offset) : 0);
+      const dy = zone.offsetY !== undefined ? zone.offsetY
+               : (zone.offset !== undefined ? (Math.sin(axisAngle * Math.PI/180) * zone.offset) : 0);
       r.setAttribute("transform", `translate(${dx} ${dy}) rotate(${axisAngle} ${50} ${50})`);
     }
     svg.appendChild(r);
