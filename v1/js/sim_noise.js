@@ -195,7 +195,7 @@ function runNoiseCheck() {
     meanDb[i] = 10 * Math.log10(accumulator[i] / NOISE_MC_ITERATIONS + ambientLinear);
   }
 
-  const canvas = simGetCanvas();
+  const canvas = simGetCanvas("noise");
   const stage  = document.getElementById("stage");
   const cw = stage.offsetWidth, ch = stage.offsetHeight;
   canvas.width = cw; canvas.height = ch;
@@ -211,5 +211,7 @@ function runNoiseCheck() {
     if (d >= OSHA_ACTION_LEVEL_DBA) actionCells++;
     if (d >= OSHA_PEL_DBA) pelCells++;
   }
-  simShowNoiseResults({ maxDb, meanDb: n > 0 ? sumDb / n : 0, actionCells, pelCells, totalCells: n, sources: sources.length });
+  const noiseResult = { maxDb, meanDb: n > 0 ? sumDb / n : 0, actionCells, pelCells, totalCells: n, sources: sources.length };
+  simShowNoiseResults(noiseResult);
+  if (typeof _simResultCache !== "undefined") _simResultCache.noise = noiseResult;
 }

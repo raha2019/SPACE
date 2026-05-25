@@ -69,6 +69,9 @@
     <button class="btn ghost" id="simAdaBtn" title="ADA accessibility corridor and door check">ADA Check</button>
     <button class="btn ghost" id="simEgressBtn" title="NFPA 101 egress travel distance and exit capacity">Egress</button>
     <button class="btn ghost" id="simNoiseBtn" title="Monte Carlo noise map (requires dba_active on zones)">Noise</button>
+    <!-- Neil: Run All button — runs ADA, Egress, and Noise in sequence and shows all three canvas overlays simultaneously; click handler wired by sim_ui.js wireSimulations() -->
+    <button class="btn ghost" id="simRunAllBtn" title="Run ADA, Egress, and Noise in sequence. Results panel and all three canvas overlays show simultaneously.">Run All</button>
+    <!-- end Neil -->
     <button class="btn ghost" id="simClearBtn" title="Clear the simulation overlay" disabled>Clear</button>
   </div>
 
@@ -157,6 +160,12 @@
       <h3>Simulation Results</h3>
       <div class="body" id="simResults"></div>
     </div>
+    <!-- Neil: Simulation Penalty Adjustment card — hidden by default; sim_ui.js fills #simPenaltyBody and shows/hides this card after each sim run -->
+    <div class="card" id="simPenaltyCard" style="display:none">
+      <h3>Simulation Penalty Adjustment</h3>
+      <div class="body" id="simPenaltyBody"></div>
+    </div>
+    <!-- end Neil -->
   </div>
 
   <!-- ============== MIDDLE PANEL ============== -->

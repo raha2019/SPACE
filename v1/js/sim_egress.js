@@ -187,7 +187,7 @@ function runEgressCheck() {
   const maxTravel = dist.reduce((mx, d) => d > mx ? d : mx, 0);
   const deadEnd   = _egressMaxDeadEnd(dist, grid, cols, rows);
 
-  const canvas = simGetCanvas();
+  const canvas = simGetCanvas("egress");
   const stage  = document.getElementById("stage");
   const cw = stage.offsetWidth, ch = stage.offsetHeight;
   canvas.width = cw; canvas.height = ch;
@@ -196,4 +196,5 @@ function runEgressCheck() {
   _egressPaintCanvas(ctx, dist, grid, cols, rows, cw, ch);
 
   simShowEgressResults({ occupants, exitCap, maxTravel, deadEnd });
+  if (typeof _simResultCache !== "undefined") _simResultCache.egress = { occupants, exitCap, maxTravel, deadEnd };
 }

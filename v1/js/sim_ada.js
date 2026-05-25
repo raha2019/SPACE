@@ -176,7 +176,7 @@ function runAdaCheck() {
   const corr  = _adaCorridorStats(dist, cols, rows);
   const doors = _adaCheckDoorWidths(du.w);
 
-  const canvas = simGetCanvas();
+  const canvas = simGetCanvas("ada");
   const stage  = document.getElementById("stage");
   const cw = stage.offsetWidth, ch = stage.offsetHeight;
   canvas.width = cw; canvas.height = ch;
@@ -185,4 +185,5 @@ function runAdaCheck() {
   _adaPaintCanvas(ctx, dist, cols, rows, cw, ch);
 
   simShowAdaResults({ doors, corr });
+  if (typeof _simResultCache !== "undefined") _simResultCache.ada = { doors, corr };
 }

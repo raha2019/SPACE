@@ -1,37 +1,39 @@
 {
   "kind": "configuration",
-  "name": "Demo Configuration (80 ft x 50 ft)",
-  "description": "Position bindings for the 21 demo elements. Designed for an 80 ft x 50 ft space calibrated at 20 px/ft (default 1600x994 px stage). Import AFTER (1) Import Floor Plan and (2) Import Elements via Element Builder. Then open Scale Calibration and set 80 ft x 50 ft. ADA check will flag the intentional 2 ft gap between CNC and Laser (ADA minimum is 3 ft).",
+  "name": "Demo Configuration — GT Invention Studio (80 ft x 50 ft)",
+  "description": "Position bindings for the 21 demo elements. Based on Rahul's default-configuration.json positions. Laser and CNC are in the same row with a 2.0 ft gap (below the 3 ft ADA minimum) to create a realistic intentional ADA violation. Import AFTER (1) Import Floor Plan and (2) Import Elements via Element Builder. Then calibrate scale to 80 ft x 50 ft so simulations run in real feet.",
   "notes": {
-    "ada_violation": "CNC right edge x=51%, Laser left edge x=53.5%. Gap: 2.5% of 80 ft stage = 2.0 ft. ADA minimum corridor width is 3 ft (36 in). Flagged as red in the ADA overlay.",
-    "noise_sources": "Welding (95 dBA), Waterjet (90 dBA), Metal and CNC (88 dBA each), Wood (95 dBA), Laser (72 dBA) are the primary noise contributors at their respective schedule_prob values.",
-    "egress": "Two exits (North and South) on the right wall. BFS travel from any floor cell should not exceed 200 ft (NFPA 101 sprinklered industrial limit). South exit added to ensure coverage of bottom equipment row."
+    "ada_violation": "Laser right edge: x=32+9=41%. CNC left edge: x=43.5%. Gap: 2.5% of 80 ft stage = 2.0 ft = 24 in. ADA minimum corridor width is 36 in. Gap fails by 1 ft. BFS distance transform will flag all cells in this gap red.",
+    "noise_sources": "Welding (95 dBA, p=0.3), Wood Room (95 dBA, p=0.4), Waterjet (90 dBA, p=0.4), CNC and Metal (88 dBA, p=0.5) are the primary contributors. Laser (72 dBA) adds moderate noise. 3D Printing (55 dBA) stays below the ambient threshold used by the sim.",
+    "egress": "Exit North is at the top-right corner, Exit South at the bottom-right. BFS seeds from both exits. Max travel distance from the far left of the dense shop should stay inside the NFPA 200 ft limit for a sprinklered industrial occupancy."
   },
   "zones": {
-    "entrance":    {"x": 0,    "y": 36},
-    "mainDesk":    {"x": 5,    "y": 36},
-    "exitN":       {"x": 90,   "y": 2},
-    "exitS":       {"x": 90,   "y": 84},
+    "entrance":    {"x":  1.5, "y": 62},
+    "mainDesk":    {"x":  9.5, "y": 60},
+    "exitN":       {"x": 91.5, "y":  2},
+    "exitS":       {"x": 91.5, "y": 81},
 
-    "welding":     {"x": 2,    "y": 2},
-    "waterjet":    {"x": 14,   "y": 2},
-    "metal":       {"x": 26,   "y": 2},
-    "cnc":         {"x": 39,   "y": 2},
-    "laser":       {"x": 53.5, "y": 2},
-    "print3d":     {"x": 65,   "y": 2},
+    "storage":     {"x":  4,   "y":  4},
+    "welding":     {"x": 16,   "y":  4},
+    "waterjet":    {"x": 28,   "y":  4},
+    "metal":       {"x":  4,   "y": 14},
 
-    "asm1":        {"x": 2,    "y": 30},
-    "asm2":        {"x": 17,   "y": 30},
-    "wood":        {"x": 32,   "y": 30},
-    "storage":     {"x": 45,   "y": 30},
-    "electronics": {"x": 56,   "y": 30},
+    "print3d":     {"x": 18,   "y": 30},
+    "laser":       {"x": 32,   "y": 30, "w": 9, "h": 6},
+    "cnc":         {"x": 43.5, "y": 30, "w": 9, "h": 7},
 
-    "craftland":   {"x": 2,    "y": 66},
-    "xr":          {"x": 14,   "y": 66},
-    "bike":        {"x": 24,   "y": 66},
+    "wood":        {"x": 14,   "y": 38, "w": 9, "h": 6},
 
-    "corridor":    {"x": 2,    "y": 54, "w": 70, "h": 10},
-    "connector":   {"x": 75,   "y": 2,  "w": 6,  "h": 84},
-    "rightOpen":   {"x": 82,   "y": 2,  "w": 14, "h": 84}
+    "asm1":        {"x": 18,   "y": 48},
+    "asm2":        {"x": 31,   "y": 48},
+    "electronics": {"x": 30,   "y": 64},
+
+    "craftland":   {"x": 34,   "y": 80},
+    "xr":          {"x": 44,   "y": 80},
+    "bike":        {"x":  7,   "y": 80},
+
+    "corridor":    {"x": 14,   "y": 94, "w": 36, "h":  4},
+    "connector":   {"x": 53,   "y": 18, "w":  7, "h": 62},
+    "rightOpen":   {"x": 64,   "y":  8, "w": 30, "h": 48}
   }
 }
