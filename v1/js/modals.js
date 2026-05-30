@@ -95,6 +95,7 @@ function wireCalibrationModal(){
     // Apply without scale
     applyFloorPlan({ ...p, scale:null });
     closeCalibrationModal();
+    _maybeAdvanceProjectImport();
   });
   document.getElementById("calConfirm").addEventListener("click", ()=>{
     if(!calState || !calState.pt1 || !calState.pt2) return;
@@ -112,7 +113,19 @@ function wireCalibrationModal(){
     const pxPerUnit = linePx / dist;
     applyFloorPlan({ ...p, scale:{ pxPerUnit, unit } });
     closeCalibrationModal();
+    _maybeAdvanceProjectImport();
   });
+}
+
+// If the Import Project wizard is currently open, refresh the step cards
+// after the floor plan / calibration step finishes.
+function _maybeAdvanceProjectImport(){
+  if(!state.pendingProjectImport) return;
+  state.pendingProjectImport = null;
+  const bd = document.getElementById("projectImportBackdrop");
+  if(bd && bd.classList.contains("open") && typeof _piRefreshCards === "function"){
+    _piRefreshCards();
+  }
 }
 
 /* ------------------------------------------------------------------
@@ -543,11 +556,16 @@ function renderRiskZoneEditor(zone){
       <div class="rz-field"><label>Offset Y (${u})</label>
         <input type="number" data-z="${zone}" data-k="offsetY" step="0.5" value="${displayValue(z.offsetY ?? 0)}" /></div>`;
   } else if(z.type === "vector"){
+    // New cone semantics: ray extends from the element along the
+    // principal axis until it hits a wall/door. The user just sets
+    // the spread (half-angle of the cone, in degrees).
+    const spread = z.angleSpread !== undefined ? z.angleSpread : 12;
     html = `
-      <div class="rz-field"><label>Length (${u})</label>
-        <input type="number" data-z="${zone}" data-k="length" min="0" step="0.5" value="${displayValue(z.length ?? 25)}" /></div>
-      <div class="rz-field"><label>Width (${u})</label>
-        <input type="number" data-z="${zone}" data-k="width" min="0" step="0.5" value="${displayValue(z.width ?? 8)}" /></div>`;
+      <div class="rz-field" style="grid-column:1 / span 2">
+        <label>Spread (° each side of axis)</label>
+        <input type="number" data-z="${zone}" data-k="angleSpread" min="0" max="89" step="1" value="${spread}" />
+        <div class="rz-help">Cone half-angle. Magnitude is infinite — the ray terminates at the first wall or door.</div>
+      </div>`;
   }
   paramsEl.innerHTML = html;
   paramsEl.querySelectorAll("input").forEach(inp=>{
@@ -633,12 +651,15 @@ function drawShapeCanvasInto(gridId, contentId, suffix){
       return `<rect class="${cls}" x="${50 - w/2 + ox}" y="${50 - h/2 + oy}" width="${w}" height="${h}" transform="rotate(${ang} ${50 + ox} ${50 + oy})"/>`;
     }
     if(z.type === "vector"){
-      const len = z.length || 25, wid = z.width || 8;
-      const kbArrow = "kbArrow" + suffix, matArrow = "matArrow" + suffix;
-      const marker = (cls==="kb-vector") ? `url(#${kbArrow})` : (cls==="mat-vector" ? `url(#${matArrow})` : "");
-      const lx = 50 + Math.cos(angRad)*len, ly = 50 + Math.sin(angRad)*len;
-      return `<rect class="${cls}" x="50" y="${50 - wid/2}" width="${len}" height="${wid}" transform="rotate(${ang} 50 50)"/>
-              <line class="${cls}" x1="50" y1="50" x2="${lx}" y2="${ly}" ${marker?`marker-end="${marker}"`:""}/>`;
+      // Cone preview: extends from element center to the far edge of the
+      // local 100x100 box. The stage view clips the cone at the first wall.
+      const spread = z.angleSpread !== undefined ? z.angleSpread : 12;
+      const sRad = spread * Math.PI / 180;
+      const L = 80; // cone reach inside the local preview box
+      const cx = 50, cy = 50;
+      const tipL = { x: cx + Math.cos(angRad - sRad) * L, y: cy + Math.sin(angRad - sRad) * L };
+      const tipR = { x: cx + Math.cos(angRad + sRad) * L, y: cy + Math.sin(angRad + sRad) * L };
+      return `<polygon class="${cls}" points="${cx},${cy} ${tipL.x.toFixed(2)},${tipL.y.toFixed(2)} ${tipR.x.toFixed(2)},${tipR.y.toFixed(2)}"/>`;
     }
     return "";
   }

@@ -91,7 +91,11 @@
   display:flex;align-items:center;gap:8px;
   padding-bottom:6px;margin-bottom:8px;
   border-bottom:1px solid var(--line);
+  cursor:grab;             /* draggable handle */
+  user-select:none;
 }
+.transform-panel .tp-hdr:active{cursor:grabbing}
+.transform-panel.dragging{box-shadow:0 12px 32px rgba(0,0,0,.7)}
 .transform-panel .tp-title{
   flex:1;font-weight:600;color:var(--text);
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
@@ -391,6 +395,15 @@
 }
 .chooser-card .cc-title{font-size:13px;font-weight:600;color:var(--text)}
 .chooser-card .cc-desc{font-size:11px;color:var(--text-mute);line-height:1.4}
+.chooser-card .cc-status{
+  margin-top:6px;align-self:flex-start;
+  font-size:10px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;
+  padding:2px 8px;border-radius:10px;
+  background:var(--panel-3);color:var(--text-mute);
+  border:1px solid var(--line);
+}
+.chooser-card.done .cc-status{background:rgba(52,201,138,.18);color:var(--good);border-color:rgba(52,201,138,.4)}
+.chooser-card.done{border-color:rgba(52,201,138,.45)}
 .chooser-section-hdr{
   font-size:10px;letter-spacing:.6px;text-transform:uppercase;
   color:var(--text-mute);margin:14px 0 6px;font-weight:600;
@@ -546,6 +559,26 @@
 .zone .composite-svg .mt{fill:rgba(122,160,255,.12);stroke:rgba(122,160,255,.75);stroke-width:1.2;stroke-dasharray:4 2;vector-effect:non-scaling-stroke}
 .zone .composite-svg .kb{stroke:#ff5e6e;stroke-width:2;fill:rgba(239,93,111,.15);vector-effect:non-scaling-stroke}
 .zone .composite-svg .mat{stroke:#e8a83b;stroke-width:2;fill:rgba(232,168,59,.15);vector-effect:non-scaling-stroke}
+
+/* Stage-level cone overlay for kickback / material vectors.
+   Sits above zones but below the transform panel; rays terminate at the
+   first structural wall/door bounding box. */
+#vectorOverlay{
+  position:absolute;inset:0;width:100%;height:100%;
+  pointer-events:none;overflow:visible;z-index:5;
+}
+#vectorOverlay .vec-kb{
+  fill:rgba(239,93,111,.18);
+  stroke:rgba(239,93,111,.85);
+  stroke-width:.3;
+  vector-effect:non-scaling-stroke;
+}
+#vectorOverlay .vec-mat{
+  fill:rgba(232,168,59,.18);
+  stroke:rgba(232,168,59,.85);
+  stroke-width:.3;
+  vector-effect:non-scaling-stroke;
+}
 .warn-list{display:flex;flex-direction:column;gap:8px;max-height:520px;overflow:auto;padding-right:2px}
 .warn-list::-webkit-scrollbar{width:8px}
 .warn-list::-webkit-scrollbar-thumb{background:var(--line-2);border-radius:4px}

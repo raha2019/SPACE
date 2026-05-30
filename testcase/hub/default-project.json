@@ -1,0 +1,313 @@
+{
+  "kind": "project",
+  "name": "Invention Studio \u2014 default project (Current Layout)",
+  "description": "Unified project file: 21 element defs + their positions for the Current Layout preset, plus the 3 region shades. Import via the Import Project wizard.",
+  "elementDefs": [
+    {
+      "id": "entrance",
+      "label": "Entrance",
+      "short": "Entrance",
+      "risk": 0,
+      "fixed": true,
+      "cat": "fixed",
+      "w": 7,
+      "h": 5.5
+    },
+    {
+      "id": "mainDesk",
+      "label": "Main Desk",
+      "short": "Main Desk",
+      "risk": 1,
+      "fixed": true,
+      "cat": "fixed",
+      "beginner": true,
+      "w": 7.5,
+      "h": 5.5
+    },
+    {
+      "id": "exitN",
+      "label": "Emergency Exit North",
+      "short": "Exit N",
+      "risk": 0,
+      "fixed": true,
+      "cat": "exit",
+      "w": 6.5,
+      "h": 4.5
+    },
+    {
+      "id": "exitS",
+      "label": "Emergency Exit South",
+      "short": "Exit S",
+      "risk": 0,
+      "fixed": true,
+      "cat": "exit",
+      "w": 6.5,
+      "h": 4.5
+    },
+    {
+      "id": "craftland",
+      "label": "Craftland",
+      "short": "Craftland",
+      "risk": 1,
+      "beginner": true,
+      "w": 9,
+      "h": 7
+    },
+    {
+      "id": "xr",
+      "label": "XR",
+      "short": "XR",
+      "risk": 1,
+      "beginner": true,
+      "w": 7,
+      "h": 6
+    },
+    {
+      "id": "asm1",
+      "label": "Assembly Tables 1",
+      "short": "Assembly 1",
+      "risk": 2,
+      "beginner": true,
+      "w": 11,
+      "h": 6
+    },
+    {
+      "id": "asm2",
+      "label": "Assembly Tables 2",
+      "short": "Assembly 2",
+      "risk": 2,
+      "beginner": true,
+      "w": 11,
+      "h": 6
+    },
+    {
+      "id": "bike",
+      "label": "Bike / Mechanical",
+      "short": "Bike",
+      "risk": 2,
+      "w": 9,
+      "h": 6
+    },
+    {
+      "id": "storage",
+      "label": "Storage",
+      "short": "Storage",
+      "risk": 2,
+      "w": 9,
+      "h": 7
+    },
+    {
+      "id": "electronics",
+      "label": "Electronics / Soldering",
+      "short": "Electronics",
+      "risk": 3,
+      "w": 9,
+      "h": 6
+    },
+    {
+      "id": "print3d",
+      "label": "3D Printing",
+      "short": "3D Print",
+      "risk": 3,
+      "w": 10,
+      "h": 6
+    },
+    {
+      "id": "laser",
+      "label": "Laser Cutting",
+      "short": "Laser",
+      "risk": 4,
+      "w": 9,
+      "h": 6
+    },
+    {
+      "id": "cnc",
+      "label": "CNC",
+      "short": "CNC",
+      "risk": 4,
+      "w": 9,
+      "h": 7
+    },
+    {
+      "id": "metal",
+      "label": "Metal Room",
+      "short": "Metal",
+      "risk": 4,
+      "w": 10,
+      "h": 7
+    },
+    {
+      "id": "wood",
+      "label": "Wood Room",
+      "short": "Wood",
+      "risk": 4,
+      "w": 10,
+      "h": 7
+    },
+    {
+      "id": "welding",
+      "label": "Welding",
+      "short": "Welding",
+      "risk": 5,
+      "w": 9,
+      "h": 6
+    },
+    {
+      "id": "waterjet",
+      "label": "Waterjet",
+      "short": "Waterjet",
+      "risk": 5,
+      "w": 9,
+      "h": 6
+    },
+    {
+      "id": "corridor",
+      "label": "Main Corridor",
+      "short": "Main Corridor",
+      "risk": 0,
+      "cat": "corridor",
+      "w": 18,
+      "h": 5
+    },
+    {
+      "id": "connector",
+      "label": "Connector Corridor",
+      "short": "Connector",
+      "risk": 0,
+      "cat": "corridor",
+      "w": 8,
+      "h": 14
+    },
+    {
+      "id": "rightOpen",
+      "label": "Right-Side Open Area",
+      "short": "Open Area",
+      "risk": 0,
+      "cat": "open",
+      "w": 18,
+      "h": 14
+    }
+  ],
+  "zones": {
+    "entrance": {
+      "x": 1.5,
+      "y": 62
+    },
+    "mainDesk": {
+      "x": 9.5,
+      "y": 60
+    },
+    "exitN": {
+      "x": 91.5,
+      "y": 2
+    },
+    "exitS": {
+      "x": 91.5,
+      "y": 81
+    },
+    "asm1": {
+      "x": 18,
+      "y": 48
+    },
+    "asm2": {
+      "x": 31,
+      "y": 48
+    },
+    "craftland": {
+      "x": 34,
+      "y": 80
+    },
+    "xr": {
+      "x": 44,
+      "y": 80
+    },
+    "bike": {
+      "x": 7,
+      "y": 80
+    },
+    "storage": {
+      "x": 4,
+      "y": 4
+    },
+    "electronics": {
+      "x": 30,
+      "y": 64
+    },
+    "print3d": {
+      "x": 18,
+      "y": 30
+    },
+    "laser": {
+      "x": 32,
+      "y": 38,
+      "w": 9,
+      "h": 6
+    },
+    "wood": {
+      "x": 14,
+      "y": 38,
+      "w": 9,
+      "h": 6
+    },
+    "metal": {
+      "x": 4,
+      "y": 14
+    },
+    "welding": {
+      "x": 16,
+      "y": 4
+    },
+    "waterjet": {
+      "x": 28,
+      "y": 4
+    },
+    "cnc": {
+      "x": 42,
+      "y": 18
+    },
+    "corridor": {
+      "x": 14,
+      "y": 94,
+      "w": 36,
+      "h": 4
+    },
+    "connector": {
+      "x": 53,
+      "y": 18,
+      "w": 7,
+      "h": 62
+    },
+    "rightOpen": {
+      "x": 64,
+      "y": 8,
+      "w": 30,
+      "h": 48
+    }
+  },
+  "regions": [
+    {
+      "label": "Dense Main Shop",
+      "x": 1,
+      "y": 1,
+      "w": 51,
+      "h": 97,
+      "color": "rgba(90,169,255,.04)"
+    },
+    {
+      "label": "Connector Corridor",
+      "x": 52,
+      "y": 1,
+      "w": 11,
+      "h": 97,
+      "color": "rgba(240,180,65,.05)"
+    },
+    {
+      "label": "Right-Side Open Area",
+      "x": 63,
+      "y": 1,
+      "w": 35,
+      "h": 97,
+      "color": "rgba(58,167,118,.04)"
+    }
+  ]
+}

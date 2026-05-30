@@ -101,7 +101,18 @@ header.app .meta b{color:var(--text-dim);font-weight:600}
   margin-left:auto;font-size:10px;background:var(--panel-3);color:var(--text-dim);
   padding:2px 7px;border-radius:10px;letter-spacing:.4px;text-transform:uppercase;
 }
-.card .body{padding:12px}
+.card .body{
+  padding:12px;
+  /* Resizable per the user's request — drag the bottom-right corner.
+     The min/max keep cards from collapsing to nothing or running off-screen. */
+  overflow:auto;
+  resize:vertical;
+  min-height:80px;
+  max-height:80vh;
+}
+/* The stage card holds the canvas; resizing its body would clip the
+   stage and the loaded-status bar. Keep its body auto-sizing. */
+.card.stage-card .body{resize:none;overflow:visible;max-height:none}
 /* ============================================================
    LEFT COLUMN COLLAPSE
    ============================================================ */

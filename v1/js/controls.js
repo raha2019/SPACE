@@ -49,90 +49,65 @@ function wireControls(){
 function exportJSON(){ exportProject(); } // legacy alias
 
 function exportProject(){
-  // Multi-file project export. We download:
-  //   exports/<datestamp>/layout.json   — main project state
-  //   imports/<datestamp>/floor-plan.<ext>   — original imported image (if any)
-  //   imports/<datestamp>/configuration.json — original imported config (if any)
-  // Browsers can't download a folder structure directly; instead we
-  // prefix the filenames with the path. Users can sort them by the
-  // datestamp prefix.
+  // Two-file project export — exactly what Import Project consumes:
+  //   exports_<stamp>__project.json     — elementDefs + zones + scale + floorPlan dims
+  //   exports_<stamp>__<floor-plan.ext> — the original floor-plan image (if any)
   const stamp = new Date().toISOString().slice(0,19).replace(/[:T]/g,"-");
-  const payload = {
-    project: "Invention Studio Layout Optimization for Safety and Accessibility",
-    lab: "Georgia Tech MATRIX Lab",
+
+  const _allDefs = allZoneDefs();
+  const elementDefs = _allDefs.map(d=>{
+    // Round-trip everything the builder + import paths know about. Keys
+    // not relevant to a given element-kind are simply omitted.
+    const base = { id:d.id, label:d.label, short:d.short, risk:d.risk };
+    if(d.cat)            base.cat = d.cat;
+    if(d.beginner)       base.beginner = true;
+    if(d.fixed)          base.fixed = true;
+    if(Number.isFinite(d.w)) base.w = d.w;
+    if(Number.isFinite(d.h)) base.h = d.h;
+    if(d.elementClass)   base.elementClass = d.elementClass;
+    if(d.subtype)        base.subtype = d.subtype;
+    if(d.operationRisk)  base.operationRisk = d.operationRisk;
+    if(d.shapes)         base.shapes = d.shapes;
+    if(d.principalAxis)  base.principalAxis = d.principalAxis;
+    if(d.operatorFootprint && d.operatorFootprint.type !== "none")   base.operatorFootprint = d.operatorFootprint;
+    if(d.maintenanceFootprint && d.maintenanceFootprint.type !== "none") base.maintenanceFootprint = d.maintenanceFootprint;
+    if(d.kickbackVector && d.kickbackVector.type !== "none")         base.kickbackVector = d.kickbackVector;
+    if(d.materialVector && d.materialVector.type !== "none")         base.materialVector = d.materialVector;
+    if(d.variableAttrs)  base.variableAttrs = d.variableAttrs;
+    if(d.coverage !== undefined) base.coverage = d.coverage;
+    if(d.icon)           base.icon = d.icon;
+    if(d.countWalls !== undefined) base.countWalls = d.countWalls;
+    if(d.doorSwing !== undefined)  base.doorSwing = d.doorSwing;
+    if(d.unionAreaPct !== undefined) base.unionAreaPct = d.unionAreaPct;
+    return base;
+  });
+
+  const zones = Object.fromEntries(_allDefs.map(d=>{
+    const z = state.zones[d.id]; if(!z) return [d.id, null];
+    const out = {
+      x:+z.x.toFixed(3), y:+z.y.toFixed(3),
+      w:+z.w.toFixed(3), h:+z.h.toFixed(3),
+    };
+    if(z.rotation) out.rotation = +z.rotation.toFixed(1);
+    return [d.id, out];
+  }).filter(([,v])=>v));
+
+  const fp = state.imports && state.imports.floorPlan;
+  const project = {
+    kind: "project",
+    name: state.config && state.config.name ? state.config.name : "Invention Studio Project",
     generatedAt: new Date().toISOString(),
-    preset: state.preset,
-    presetName: PRESETS[state.preset].name,
-    units: hasScale() ? state.scale.unit : null,
-    scale: state.scale ? { pxPerUnit: state.scale.pxPerUnit, unit: state.scale.unit,
-                           stageWidthPx: state.scale.stageWidthPx, stageHeightPx: state.scale.stageHeightPx } : null,
-    settings: {
-      trafficMode: state.trafficMode,
-      activeUse: state.activeUse,
-      showClearance: state.showClearance,
-      showFlow: state.showFlow,
-    },
-    score: state.score,
-    feasibilityGate: state.gate,
-    metrics: state.metrics,
-    metricWeights: Object.fromEntries(METRIC_DEFS.map(m=>[m.id, m.weight])),
-    flags: state.flags.map(f=>({severity:f.severity, title:f.title, why:f.why, fix:f.fix, zones:f.zones})),
-    flagCounts: countFlags(),
-    zones: Object.fromEntries(
-      allZoneDefs().map(d=>{
-        const z = state.zones[d.id];
-        return [d.id, {
-          label: d.label, risk: d.risk, fixed: !!d.fixed,
-          x: +z.x.toFixed(2), y: +z.y.toFixed(2),
-          w: +z.w.toFixed(2), h: +z.h.toFixed(2),
-          xRealUnits: hasScale() ? +pctToUnits(z.x,'x').toFixed(3) : null,
-          yRealUnits: hasScale() ? +pctToUnits(z.y,'y').toFixed(3) : null,
-          wRealUnits: hasScale() ? +pctToUnits(z.w,'x').toFixed(3) : null,
-          hRealUnits: hasScale() ? +pctToUnits(z.h,'y').toFixed(3) : null,
-          rotation: +(z.rotation || 0).toFixed(1),
-          included: z.included !== false,
-          activeUse: !!z.activeUse,
-          custom: !!d.custom,
-          elementClass: d.elementClass || "builtin",
-        }];
-      })
-    ),
-    customElementDefs: state.customElements.map(d=>({
-      id: d.id, label: d.label, short: d.short, risk: d.risk,
-      operationRisk: d.operationRisk || null,
-      moveable: !d.fixed,
-      w: d.w, h: d.h,
-      cat: d.cat || null,
-      beginner: !!d.beginner,
-      shapes: d.shapes || [],
-      principalAxis: d.principalAxis || null,
-      operatorFootprint:    d.operatorFootprint    || {type:"none"},
-      maintenanceFootprint: d.maintenanceFootprint || {type:"none"},
-      kickbackVector:       d.kickbackVector       || {type:"none"},
-      materialVector:       d.materialVector       || {type:"none"},
-      variableAttrs: d.variableAttrs || null,
-    })),
-    structuralElements: state.structuralElements.map(d=>({
-      id: d.id, label: d.label, subtype: d.subtype,
-      w: d.w, h: d.h,
-      shapes: d.shapes,
-      countWalls: !!d.countWalls,
-      doorSwing: d.doorSwing,
-      unionAreaPct: d.unionAreaPct,
-    })),
-    amenityElements: state.amenityElements.map(d=>({
-      id: d.id, label: d.label, subtype: d.subtype,
-      coverage: d.coverage,
-      moveable: !d.fixed,
-      icon: d.icon,
-    })),
-    notes: [
-      "Coordinates are normalized 0..100% of the stage; if a scale was set, real-unit equivalents are included as xRealUnits/yRealUnits/etc.",
-      "Scoring weights and warning thresholds are preliminary and intended for adjustment based on staff/PI feedback, Matterport measurements, SUMS, 3DPrinterOS, and observation data.",
-    ],
+    floorPlan: fp ? { width: fp.width, height: fp.height, filename: fp.filename } : null,
+    scale: state.scale ? {
+      pixels: state.scale.pxPerUnit,    // px per 1 unit
+      realLength: 1,
+      unit: state.scale.unit,
+    } : null,
+    elementDefs,
+    zones,
+    regions: REGIONS && REGIONS.length ? REGIONS : undefined,
   };
 
-  // Helper to trigger a download.
   function triggerDownload(href, filename){
     const a = document.createElement("a");
     a.href = href;
@@ -145,40 +120,16 @@ function exportProject(){
     }, 200);
   }
 
-  // 1) The main project JSON. The path uses '/' so when the user
-  // organizes downloads in a sensible browser, they cluster nicely.
-  const txt = JSON.stringify(payload, null, 2);
+  // 1) The project JSON.
+  const txt = JSON.stringify(project, null, 2);
   const blob = new Blob([txt], {type:"application/json"});
   const url = URL.createObjectURL(blob);
-  triggerDownload(url, `exports_${stamp}__layout.json`);
+  triggerDownload(url, `exports_${stamp}__project.json`);
 
-  // 2) Imported floor plan (if any). Use data URL directly.
-  if(state.imports && state.imports.floorPlan){
-    const fp = state.imports.floorPlan;
-    setTimeout(()=> triggerDownload(fp.dataUrl, `imports_${stamp}__${fp.filename || "floor-plan"}`), 300);
+  // 2) The floor plan image (if one was imported).
+  if(fp && fp.dataUrl){
+    setTimeout(()=> triggerDownload(fp.dataUrl, `exports_${stamp}__${fp.filename || "floor-plan"}`), 300);
   }
-
-  // 3) Imported configuration JSON (if any).
-  if(state.imports && state.imports.config){
-    const c = state.imports.config;
-    const cblob = new Blob([c.text], {type:"application/json"});
-    const curl = URL.createObjectURL(cblob);
-    setTimeout(()=> triggerDownload(curl, `imports_${stamp}__${c.filename || "configuration.json"}`), 600);
-  }
-
-  // 4) A manifest so the user can see what to expect.
-  const manifest = {
-    generatedAt: new Date().toISOString(),
-    files: [
-      `exports_${stamp}__layout.json`,
-      state.imports && state.imports.floorPlan ? `imports_${stamp}__${state.imports.floorPlan.filename || "floor-plan"}` : null,
-      state.imports && state.imports.config ? `imports_${stamp}__${state.imports.config.filename || "configuration.json"}` : null,
-    ].filter(Boolean),
-    note: "These files are part of one project export. Group them by the timestamp prefix.",
-  };
-  const mblob = new Blob([JSON.stringify(manifest, null, 2)], {type:"application/json"});
-  const murl = URL.createObjectURL(mblob);
-  setTimeout(()=> triggerDownload(murl, `exports_${stamp}__manifest.json`), 900);
 }
 
 /* ------------------------------------------------------------------
@@ -410,12 +361,80 @@ function importElementsFile(file){
   reader.readAsText(file);
 }
 
+/* ------------------------------------------------------------------
+   PROJECT FILE — unified format: elements + positions + scale in one JSON.
+   Imported via the "Import Project" wizard (also delivered when a legacy
+   bundle/config has elementDefs+zones). applyProject() routes through the
+   existing elements-bundle and config code paths so behavior matches the
+   step-by-step flow exactly.
+   ------------------------------------------------------------------ */
+function validateProject(p){
+  const errs = [];
+  if(!p || typeof p !== "object"){
+    errs.push("Project must be a JSON object.");
+    return errs;
+  }
+  if(p.elementDefs !== undefined && !Array.isArray(p.elementDefs))
+    errs.push("'elementDefs' must be an array.");
+  if(p.zones !== undefined && (typeof p.zones !== "object" || p.zones === null))
+    errs.push("'zones' must be an object.");
+  if(!p.elementDefs && !p.zones)
+    errs.push("Project must include at least 'elementDefs' or 'zones'.");
+  return errs;
+}
+
+function applyProject(project){
+  // 1. Elements — go through the bundle path so they're editable customs.
+  if(Array.isArray(project.elementDefs) && project.elementDefs.length){
+    applyElementsBundle({
+      elementDefs: project.elementDefs,
+      regions: project.regions,
+    });
+  }
+  // 2. Positions + (optional) scale / floor-plan dims — go through the
+  //    config path so the status-bar plumbing fires the same way.
+  if(project.zones || project.scale || project.floorPlan){
+    applyConfig({
+      name: project.name,
+      zones: project.zones,
+      scale: project.scale,
+      floorPlan: project.floorPlan,
+    });
+  }
+}
+
 function importConfigFromFile(file){
   const reader = new FileReader();
   reader.onload = (e) => {
     let parsed;
     try { parsed = JSON.parse(e.target.result); }
     catch (err) { alert("Invalid JSON: " + err.message); return; }
+
+    // Unified project file (kind:"project", or any JSON with both
+    // elementDefs AND zones). Route to applyProject; record the import.
+    const looksLikeProject = parsed && (parsed.kind === "project" ||
+      (Array.isArray(parsed.elementDefs) && parsed.zones));
+    if(looksLikeProject){
+      const errors = validateProject(parsed);
+      if(errors.length){
+        alert("Project file is invalid:\n\n• " + errors.join("\n• "));
+        return;
+      }
+      state.imports.config = {
+        filename: file.name,
+        text: e.target.result,
+        importedAt: new Date().toISOString(),
+      };
+      applyProject(parsed);
+      // Refresh the wizard cards if it was open.
+      state.pendingProjectImport = null;
+      const bd = document.getElementById("projectImportBackdrop");
+      if(bd && bd.classList.contains("open") && typeof _piRefreshCards === "function"){
+        _piRefreshCards();
+      }
+      return;
+    }
+
     const errors = validateConfig(parsed);
     if(errors.length){
       alert("Configuration file is missing required fields:\n\n• " + errors.join("\n• "));
@@ -428,9 +447,83 @@ function importConfigFromFile(file){
       importedAt: new Date().toISOString(),
     };
     applyConfig(parsed);
+    // Refresh the wizard cards if it was open.
+    state.pendingProjectImport = null;
+    const bd = document.getElementById("projectImportBackdrop");
+    if(bd && bd.classList.contains("open") && typeof _piRefreshCards === "function"){
+      _piRefreshCards();
+    }
   };
   reader.onerror = () => alert("Could not read the selected file.");
   reader.readAsText(file);
+}
+
+/* Import Project wizard — opens a 2-card chooser modal. Each card kicks
+   off a step independently. The wizard remembers completion across steps
+   so the user can do them in any order. */
+function startProjectImportWizard(){
+  const bd = document.getElementById("projectImportBackdrop");
+  if(!bd) return;
+  bd.classList.add("open");
+  _piRefreshCards();
+}
+
+function closeProjectImportWizard(){
+  const bd = document.getElementById("projectImportBackdrop");
+  if(bd) bd.classList.remove("open");
+  state.pendingProjectImport = null;
+}
+
+function _piRefreshCards(){
+  // Floor-plan card reflects whether a floor plan + (optional) scale is loaded.
+  const fpCard = document.querySelector('#projectImportBackdrop [data-pi-step="floor-plan"]');
+  const fpStatus = document.getElementById("piStatusFloorPlan");
+  const hasFP = !!(state.imports && state.imports.floorPlan);
+  if(fpCard) fpCard.classList.toggle("done", hasFP);
+  if(fpStatus){
+    if(hasFP){
+      const u = hasScale() ? `${state.scale.pxPerUnit.toFixed(1)} px/${state.scale.unit}` : "no scale";
+      fpStatus.textContent = `Loaded · ${u}`;
+    } else {
+      fpStatus.textContent = "Not started";
+    }
+  }
+  // Project-file card reflects whether a project / config has been imported.
+  const pjCard = document.querySelector('#projectImportBackdrop [data-pi-step="project-file"]');
+  const pjStatus = document.getElementById("piStatusProject");
+  const hasCfg = !!(state.imports && state.imports.config);
+  if(pjCard) pjCard.classList.toggle("done", hasCfg);
+  if(pjStatus){
+    if(hasCfg){
+      const cnt = allZoneDefs().length;
+      pjStatus.textContent = `Loaded · ${cnt} element${cnt === 1 ? "" : "s"}`;
+    } else {
+      pjStatus.textContent = "Not started";
+    }
+  }
+}
+
+function _piTriggerStep(step){
+  if(step === "floor-plan"){
+    state.pendingProjectImport = "step-floor-plan";
+    document.getElementById("importImageInput").click();
+  } else if(step === "project-file"){
+    state.pendingProjectImport = "step-project-file";
+    document.getElementById("importConfigInput").click();
+  }
+}
+
+function wireProjectImportWizard(){
+  const bd = document.getElementById("projectImportBackdrop");
+  if(!bd) return;
+  document.getElementById("piClose").addEventListener("click", closeProjectImportWizard);
+  document.getElementById("piDone").addEventListener("click", closeProjectImportWizard);
+  bd.addEventListener("click", (e)=>{
+    if(e.target.id === "projectImportBackdrop") closeProjectImportWizard();
+  });
+  document.querySelectorAll('#projectImportBackdrop .chooser-card').forEach(card=>{
+    card.addEventListener("click", ()=> _piTriggerStep(card.dataset.piStep));
+  });
 }
 
 function wireConfigImport(){
@@ -687,6 +780,13 @@ function refreshTransformPanel(){
   }
   panel.classList.add("open");
   document.getElementById("tpTitle").textContent = def.label;
+  // Restore the dragged position (if any) so the panel doesn't snap back
+  // to top-right when a different element is selected.
+  if(state.transformPanelPos){
+    panel.style.left = state.transformPanelPos.left + "px";
+    panel.style.top  = state.transformPanelPos.top  + "px";
+    panel.style.right = "auto";
+  }
   updateTransformPanelInputs();
 
   // Disable inputs for locked zones — still selectable for reference,
@@ -803,6 +903,49 @@ function wireTransformPanel(){
   document.getElementById("tpResetSize").addEventListener("click", resetSelectedSize);
   document.getElementById("tpResetRot").addEventListener("click", resetSelectedRotation);
 
+  // Drag the panel by its header. Position is stored on state so it
+  // persists across reselections within the same session.
+  const panel = document.getElementById("transformPanel");
+  const handle = panel.querySelector(".tp-hdr");
+  let drag = null;
+  handle.addEventListener("pointerdown", (e)=>{
+    // Don't start a drag if the user clicked the × or lock button.
+    if(e.target.closest("button")) return;
+    e.preventDefault();
+    const r = panel.getBoundingClientRect();
+    const stageR = stageEl.getBoundingClientRect();
+    drag = {
+      dx: e.clientX - r.left,
+      dy: e.clientY - r.top,
+      stageL: stageR.left,
+      stageT: stageR.top,
+      stageW: stageR.width,
+      stageH: stageR.height,
+      panelW: r.width,
+      panelH: r.height,
+    };
+    panel.classList.add("dragging");
+    handle.setPointerCapture(e.pointerId);
+  });
+  handle.addEventListener("pointermove", (e)=>{
+    if(!drag) return;
+    // Compute absolute position within the stage; clamp to bounds.
+    let left = e.clientX - drag.dx - drag.stageL;
+    let top  = e.clientY - drag.dy - drag.stageT;
+    left = Math.max(0, Math.min(drag.stageW - drag.panelW, left));
+    top  = Math.max(0, Math.min(drag.stageH - drag.panelH, top));
+    panel.style.left = left + "px";
+    panel.style.top  = top  + "px";
+    panel.style.right = "auto";
+    state.transformPanelPos = { left, top };
+  });
+  handle.addEventListener("pointerup", (e)=>{
+    if(!drag) return;
+    drag = null;
+    panel.classList.remove("dragging");
+    handle.releasePointerCapture(e.pointerId);
+  });
+
   // Click on empty stage area deselects.
   stageEl.addEventListener("pointerdown", (e)=>{
     if(e.target === stageEl) deselectZone();
@@ -896,4 +1039,7 @@ function wireImageImport(){
     if(f) importFloorPlanImage(f);
     input.value = "";
   });
+  // Import Project wizard entry point.
+  const projBtn = document.getElementById("importProjectBtn");
+  if(projBtn) projBtn.addEventListener("click", startProjectImportWizard);
 }

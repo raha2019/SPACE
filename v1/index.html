@@ -66,9 +66,10 @@
 
   <div class="spacer"></div>
   <input type="file" id="importImageInput" accept="image/png,image/jpeg,image/jpg,image/svg+xml,image/webp,image/gif,.png,.jpg,.jpeg,.svg,.webp,.gif,.dxf,.dwg" style="display:none" />
+  <button class="btn primary" id="importProjectBtn" title="Wizard: pick a floor plan + calibrate scale, then pick a project JSON (elements + positions) — one-click setup.">Import Project</button>
   <button class="btn ghost" id="importImageBtn" title="Replace the layout background image. Accepts PNG, JPG, SVG, WEBP, GIF (DXF/DWG require external conversion).">Import Floor Plan</button>
   <input type="file" id="importConfigInput" accept="application/json,.json" style="display:none" />
-  <button class="btn ghost" id="importConfigBtn" title="Load a configuration file (.json) specifying a floor plan image and pixel scale.">Import Configuration</button>
+  <button class="btn ghost" id="importConfigBtn" title="Load a project or configuration JSON. Project files include elements + positions in one file; configuration files include positions only.">Import Configuration</button>
   <button class="btn ghost" id="elementBuilderBtn" title="Create custom elements with name, risk level, and default size.">Element Builder</button>
   <button class="btn ghost" id="resetBtn">Reset Layout</button>
   <button class="btn primary" id="exportBtn">Export Project</button>
@@ -715,6 +716,40 @@
       <button class="btn ghost" id="ebBack" style="display:none">← Back to chooser</button>
       <button class="btn ghost" id="ebCancel">Close</button>
       <button class="btn primary" id="ebSave" style="display:none">Add Element</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     IMPORT PROJECT WIZARD
+     Two-step chooser: floor plan + calibration, then the project file.
+     ============================================================ -->
+<div class="modal-backdrop" id="projectImportBackdrop">
+  <div class="modal wide" role="dialog" aria-labelledby="piTitle">
+    <div class="modal-hdr">
+      <h2 id="piTitle">Import Project</h2>
+      <span class="mh-sub">Set up a project in two steps</span>
+      <button class="mh-close" id="piClose" title="Close">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="chooser-section-hdr">Steps</div>
+      <div class="chooser-grid">
+        <div class="chooser-card" data-pi-step="floor-plan">
+          <div class="cc-icon">🗺️</div>
+          <div class="cc-title">1. Floor Plan & Scale</div>
+          <div class="cc-desc">Pick a floor plan image (PNG, JPG, SVG, etc.) and calibrate the real-world scale by clicking two reference points.</div>
+          <div class="cc-status" id="piStatusFloorPlan">Not started</div>
+        </div>
+        <div class="chooser-card" data-pi-step="project-file">
+          <div class="cc-icon">📦</div>
+          <div class="cc-title">2. Project File</div>
+          <div class="cc-desc">Pick a project JSON containing element definitions and their positions. Elements come in as editable.</div>
+          <div class="cc-status" id="piStatusProject">Not started</div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-ftr">
+      <button class="btn primary" id="piDone">Done</button>
     </div>
   </div>
 </div>

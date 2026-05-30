@@ -12,6 +12,21 @@ function evaluate(){
     state.gate = "—";
     return;
   }
+  // Scoring rules reference a handful of well-known zone ids (asm1, exitN,
+  // mainDesk, corridor, …). When the user's bundle doesn't include one of
+  // them, we want to degrade gracefully instead of throwing — otherwise an
+  // exception here blocks the downstream render() and the UI freezes.
+  try { _evaluateBody(_allDefs); }
+  catch(e){
+    console.warn("[evaluate] scoring rule threw — partial result kept.", e);
+    if(!Array.isArray(state.flags)) state.flags = [];
+    if(!state.metrics || typeof state.metrics !== "object") state.metrics = {};
+    if(state.score == null) state.score = null;
+    if(!state.gate) state.gate = "—";
+  }
+}
+
+function _evaluateBody(_allDefs){
   const flags = [];
   const Z = state.zones;
   const defs = Object.fromEntries(_allDefs.map(d=>[d.id,d]));

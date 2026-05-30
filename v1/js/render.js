@@ -71,6 +71,8 @@ function renderZones(){
   for(const def of allZoneDefs()){
     const z = state.zones[def.id];
     if(!z) continue;
+    // Excluded ("inc" toggle off) → hide entirely from the stage.
+    if(z.included === false) continue;
 
     // Clearance halo (movable, high-risk only, included only)
     if(state.showClearance && !def.fixed && z.included !== false){
@@ -223,27 +225,8 @@ function drawRiskZone(svg, zone, cls, axisAngle, uid){
     }
     svg.appendChild(r);
   } else if(zone.type === "vector"){
-    const ang = axisAngle * Math.PI/180;
-    const length = zone.length || 30;
-    const width = zone.width || 8;
-    const r = document.createElementNS(ns,"rect");
-    r.setAttribute("class", cls);
-    r.setAttribute("x", "50");
-    r.setAttribute("y", 50 - width/2);
-    r.setAttribute("width", length);
-    r.setAttribute("height", width);
-    r.setAttribute("transform", `rotate(${axisAngle} 50 50)`);
-    svg.appendChild(r);
-    const x2 = 50 + Math.cos(ang) * length;
-    const y2 = 50 + Math.sin(ang) * length;
-    const line = document.createElementNS(ns,"line");
-    line.setAttribute("class", cls);
-    line.setAttribute("x1","50"); line.setAttribute("y1","50");
-    line.setAttribute("x2", x2); line.setAttribute("y2", y2);
-    if(cls === "kb" || cls === "mat"){
-      line.setAttribute("marker-end", `url(#${cls}-${uid})`);
-    }
-    svg.appendChild(line);
+    // Vector cones are drawn at the stage level (see renderVectorOverlay)
+    // so they extend until they hit a wall/door. Skip per-element render.
   }
 }
 
