@@ -31,7 +31,80 @@ const state = {
   defaultStageBg:null,
   // UI state for collapsible status banner
   statusCollapsed:false,
+  // Heatmap overlay — null = off, else a METRIC_DEFS key.
+  heatmapMetric:null,
+  transformPanelPos:null,
 };
+
+/* ------------------------------------------------------------------
+   4.5  PERSISTENCE — autosave snapshot to localStorage so the user's
+   imports, custom elements, edited positions, and per-preset edits
+   survive a page reload. Save is debounced so drags don't thrash
+   storage; restore happens at init() before the first render().
+   ------------------------------------------------------------------ */
+const _PERSIST_KEY = "space.v1.app";
+let _persistTimer = null;
+function saveAppState(){
+  if(_persistTimer) clearTimeout(_persistTimer);
+  _persistTimer = setTimeout(()=>{
+    try {
+      const snap = {
+        v: 1,
+        zoneDefs: ZONE_DEFS,
+        presets: PRESETS,
+        regions: REGIONS,
+        state: {
+          preset: state.preset,
+          zones: state.zones,
+          trafficMode: state.trafficMode,
+          activeUse: state.activeUse,
+          showClearance: state.showClearance,
+          showFlow: state.showFlow,
+          showSidebar: state.showSidebar,
+          units: state.units,
+          scale: state.scale,
+          customElements: state.customElements,
+          structuralElements: state.structuralElements,
+          amenityElements: state.amenityElements,
+          heatmapMetric: state.heatmapMetric,
+          imports: state.imports,
+          statusCollapsed: state.statusCollapsed,
+          transformPanelPos: state.transformPanelPos,
+        },
+      };
+      localStorage.setItem(_PERSIST_KEY, JSON.stringify(snap));
+    } catch(e){
+      console.warn("[persist] save failed:", e && e.message);
+    }
+  }, 300);
+}
+
+function loadAppState(){
+  try {
+    const raw = localStorage.getItem(_PERSIST_KEY);
+    if(!raw) return false;
+    const snap = JSON.parse(raw);
+    if(!snap || snap.v !== 1) return false;
+    // Mutate the const arrays/object in place to preserve any references
+    // held in other modules.
+    ZONE_DEFS.length = 0;
+    if(Array.isArray(snap.zoneDefs)) ZONE_DEFS.push(...snap.zoneDefs);
+    for(const k of Object.keys(PRESETS)) delete PRESETS[k];
+    if(snap.presets && typeof snap.presets === "object") Object.assign(PRESETS, snap.presets);
+    REGIONS.length = 0;
+    if(Array.isArray(snap.regions)) REGIONS.push(...snap.regions);
+    if(snap.state && typeof snap.state === "object") Object.assign(state, snap.state);
+    return true;
+  } catch(e){
+    console.warn("[persist] load failed:", e && e.message);
+    return false;
+  }
+}
+
+function clearAppState(){
+  try { localStorage.removeItem(_PERSIST_KEY); } catch(e){}
+}
+
 /* ------------------------------------------------------------------
    5. UTILITY MATH
    ------------------------------------------------------------------ */
@@ -159,11 +232,27 @@ function allZoneDefs(){
 }
 
 function loadPreset(name){
+  // Snapshot the OUTGOING preset's edited positions back into PRESETS so
+  // that switching tabs and coming back preserves what the user did.
+  // Only runs when there's a meaningful state.zones to capture (i.e. on
+  // every switch after the first preset load).
+  if(state.preset && PRESETS[state.preset] && Object.keys(state.zones || {}).length){
+    const prev = PRESETS[state.preset];
+    if(!prev.zones) prev.zones = {};
+    for(const [id, z] of Object.entries(state.zones)){
+      prev.zones[id] = {
+        x: z.x, y: z.y,
+        w: z.w, h: z.h,
+        rotation: z.rotation || 0,
+      };
+    }
+  }
+
   state.preset = name;
   const preset = PRESETS[name];
   state.zones = {};
   for(const def of allZoneDefs()){
-    const p = (preset.zones && preset.zones[def.id]) || {x:50,y:50};
+    const p = (preset && preset.zones && preset.zones[def.id]) || {x:50,y:50};
     state.zones[def.id] = {
       x: p.x, y: p.y,
       w: p.w !== undefined ? p.w : def.w,

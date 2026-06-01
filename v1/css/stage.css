@@ -183,3 +183,47 @@
   text-transform:uppercase;pointer-events:none;
   border:1px solid rgba(122,160,255,.35);
 }
+
+/* Vector cones (kickback / material loading) — projected from element
+   center, clipped at the first wall/door obstacle. */
+.vector-overlay .vec-kb{
+  fill: rgba(239,93,111,.18);
+  stroke: rgba(239,93,111,.65);
+  stroke-width: .25;
+  vector-effect: non-scaling-stroke;
+}
+.vector-overlay .vec-mat{
+  fill: rgba(232,168,59,.18);
+  stroke: rgba(232,168,59,.65);
+  stroke-width: .25;
+  vector-effect: non-scaling-stroke;
+}
+
+/* Custom elements with a real composite footprint hide the boxy zone
+   chrome — the SVG inside is the only "shape" the user sees, but the
+   bounding rect is still clickable / draggable. */
+.zone.shape-only{
+  background:transparent !important;
+  border:1px dashed rgba(255,255,255,.12);
+  box-shadow:none;
+  padding:0;
+}
+.zone.shape-only .badge{display:none}
+.zone.shape-only .row1{
+  position:absolute;left:2px;top:2px;
+  background:rgba(0,0,0,.55);padding:1px 5px;border-radius:3px;
+  pointer-events:none;
+}
+.zone.shape-only.selected{
+  border:1.5px solid var(--accent);
+  box-shadow:0 0 0 1px var(--accent);
+}
+.zone.shape-only:hover{
+  border-color:rgba(90,169,255,.55);
+  box-shadow:none;
+}
+.zone.shape-only .composite-svg .fp{
+  fill:rgba(122,160,255,.32);
+  stroke:rgba(220,235,255,.95);
+  stroke-width:1.6;
+}

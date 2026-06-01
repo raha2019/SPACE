@@ -443,20 +443,38 @@ function updateBuilderPreview(){
 }
 
 /* --- Shape list editor (tab 2) --- */
+/* Element Builder shape coords are now CENTERED — the user enters the
+   shape's CENTER (cx, cy) relative to the element's center (0,0 = middle).
+   We continue to store top-left-anchored coords internally so the render
+   pipeline doesn't change. */
+function _shapeCenter(sh){
+  if(sh.type === "circle") return { cx: (sh.x||0) - 50, cy: (sh.y||0) - 50 };
+  return { cx: ((sh.x||0) + (sh.w||0)/2) - 50, cy: ((sh.y||0) + (sh.h||0)/2) - 50 };
+}
+function _setShapeCenterX(sh, cx){
+  if(sh.type === "circle") sh.x = cx + 50;
+  else sh.x = (cx + 50) - (sh.w||0)/2;
+}
+function _setShapeCenterY(sh, cy){
+  if(sh.type === "circle") sh.y = cy + 50;
+  else sh.y = (cy + 50) - (sh.h||0)/2;
+}
+
 function renderShapeList(){
   const listEl = document.getElementById("ebShapeList");
   listEl.innerHTML = "";
   ebDraft.shapes.forEach((sh, i)=>{
     const row = document.createElement("div");
     row.className = "shape-row";
+    const c = _shapeCenter(sh);
     if(sh.type === "rect"){
       row.innerHTML = `
         <select data-idx="${i}" data-key="type">
           <option value="rect" selected>Rect</option>
           <option value="circle">Circle</option>
         </select>
-        <input type="number" min="0" max="100" step="1" value="${sh.x}" data-idx="${i}" data-key="x" />
-        <input type="number" min="0" max="100" step="1" value="${sh.y}" data-idx="${i}" data-key="y" />
+        <input type="number" min="-50" max="50" step="1" value="${c.cx.toFixed(1)}" data-idx="${i}" data-key="cx" title="Center X (0 = element center)" />
+        <input type="number" min="-50" max="50" step="1" value="${c.cy.toFixed(1)}" data-idx="${i}" data-key="cy" title="Center Y (0 = element center)" />
         <input type="number" min="1" max="100" step="1" value="${sh.w}" data-idx="${i}" data-key="w" />
         <input type="number" min="1" max="100" step="1" value="${sh.h}" data-idx="${i}" data-key="h" />
         <button class="sr-del" data-idx="${i}" title="Remove">×</button>
@@ -467,8 +485,8 @@ function renderShapeList(){
           <option value="rect">Rect</option>
           <option value="circle" selected>Circle</option>
         </select>
-        <input type="number" min="0" max="100" step="1" value="${sh.x}" data-idx="${i}" data-key="x" title="Center X" />
-        <input type="number" min="0" max="100" step="1" value="${sh.y}" data-idx="${i}" data-key="y" title="Center Y" />
+        <input type="number" min="-50" max="50" step="1" value="${c.cx.toFixed(1)}" data-idx="${i}" data-key="cx" title="Center X (0 = element center)" />
+        <input type="number" min="-50" max="50" step="1" value="${c.cy.toFixed(1)}" data-idx="${i}" data-key="cy" title="Center Y (0 = element center)" />
         <input type="number" min="1" max="50" step="1" value="${sh.radius}" data-idx="${i}" data-key="radius" title="Radius" />
         <span class="sr-label" style="text-align:center;align-self:center">—</span>
         <button class="sr-del" data-idx="${i}" title="Remove">×</button>
@@ -482,21 +500,23 @@ function renderShapeList(){
       const key = e.target.dataset.key;
       const sh = ebDraft.shapes[idx];
       if(key === "type"){
-        // Convert representation
+        // Preserve the shape's center when converting between rect and circle.
+        const c = _shapeCenter(sh);
         if(e.target.value === "circle"){
           ebDraft.shapes[idx] = { type:"circle",
-            x: (sh.x||0) + (sh.w||0)/2,
-            y: (sh.y||0) + (sh.h||0)/2,
+            x: c.cx + 50, y: c.cy + 50,
             radius: Math.min(sh.w||20, sh.h||20)/2 };
         } else {
+          const w = (sh.radius||10)*2, h = (sh.radius||10)*2;
           ebDraft.shapes[idx] = { type:"rect",
-            x: Math.max(0, (sh.x||50) - (sh.radius||10)),
-            y: Math.max(0, (sh.y||50) - (sh.radius||10)),
-            w: (sh.radius||10)*2,
-            h: (sh.radius||10)*2,
-            rotation: 0 };
+            x: (c.cx + 50) - w/2, y: (c.cy + 50) - h/2,
+            w, h, rotation: 0 };
         }
         renderShapeList();
+      } else if(key === "cx"){
+        _setShapeCenterX(sh, parseFloat(e.target.value));
+      } else if(key === "cy"){
+        _setShapeCenterY(sh, parseFloat(e.target.value));
       } else {
         sh[key] = parseFloat(e.target.value);
       }
@@ -556,15 +576,32 @@ function renderRiskZoneEditor(zone){
       <div class="rz-field"><label>Offset Y (${u})</label>
         <input type="number" data-z="${zone}" data-k="offsetY" step="0.5" value="${displayValue(z.offsetY ?? 0)}" /></div>`;
   } else if(z.type === "vector"){
-    // New cone semantics: ray extends from the element along the
-    // principal axis until it hits a wall/door. The user just sets
-    // the spread (half-angle of the cone, in degrees).
-    const spread = z.angleSpread !== undefined ? z.angleSpread : 12;
+    // Cone semantics: ray extends from the element until it hits a
+    // wall/door. Origin defaults to element center but can be offset.
+    // Direction defaults to the principal axis but can be rotated.
+    const spread  = z.angleSpread !== undefined ? z.angleSpread : 12;
+    const angle   = z.angle !== undefined ? z.angle : 0;
+    const offX    = z.offsetX !== undefined ? z.offsetX : 0;
+    const offY    = z.offsetY !== undefined ? z.offsetY : 0;
     html = `
-      <div class="rz-field" style="grid-column:1 / span 2">
-        <label>Spread (° each side of axis)</label>
+      <div class="rz-field">
+        <label>Angle (° from axis)</label>
+        <input type="number" data-z="${zone}" data-k="angle" min="-180" max="180" step="5" value="${angle}" />
+      </div>
+      <div class="rz-field">
+        <label>Spread (° each side)</label>
         <input type="number" data-z="${zone}" data-k="angleSpread" min="0" max="89" step="1" value="${spread}" />
-        <div class="rz-help">Cone half-angle. Magnitude is infinite — the ray terminates at the first wall or door.</div>
+      </div>
+      <div class="rz-field">
+        <label>Offset X (${u})</label>
+        <input type="number" data-z="${zone}" data-k="offsetX" step="0.5" value="${displayValue(offX)}" />
+      </div>
+      <div class="rz-field">
+        <label>Offset Y (${u})</label>
+        <input type="number" data-z="${zone}" data-k="offsetY" step="0.5" value="${displayValue(offY)}" />
+      </div>
+      <div class="rz-field" style="grid-column:1 / span 2">
+        <div class="rz-help">Cone origin = element center + offset. Direction = principal axis + angle. Magnitude is infinite — the ray terminates at the first wall or door.</div>
       </div>`;
   }
   paramsEl.innerHTML = html;
@@ -574,8 +611,10 @@ function renderRiskZoneEditor(zone){
       const dz = ebDraft[draftKey];
       const raw = parseFloat(e.target.value);
       if(!Number.isFinite(raw)) return;
-      // Convert from displayed unit back to internal % storage.
-      dz[k] = inputValue(raw);
+      // Angles stay in degrees; dimensions/offsets convert from displayed
+      // unit to internal % storage.
+      if(k === "angle" || k === "angleSpread") dz[k] = raw;
+      else dz[k] = inputValue(raw);
       drawShapeCanvas();
     });
   });
@@ -651,15 +690,19 @@ function drawShapeCanvasInto(gridId, contentId, suffix){
       return `<rect class="${cls}" x="${50 - w/2 + ox}" y="${50 - h/2 + oy}" width="${w}" height="${h}" transform="rotate(${ang} ${50 + ox} ${50 + oy})"/>`;
     }
     if(z.type === "vector"){
-      // Cone preview: extends from element center to the far edge of the
-      // local 100x100 box. The stage view clips the cone at the first wall.
+      // Cone preview: origin = element center + offset, direction =
+      // principal axis + per-vector angle. Magnitude infinite on stage;
+      // here we cap at the local preview box edge so it stays readable.
       const spread = z.angleSpread !== undefined ? z.angleSpread : 12;
+      const extraAng = (z.angle || 0) * Math.PI / 180;
       const sRad = spread * Math.PI / 180;
-      const L = 80; // cone reach inside the local preview box
-      const cx = 50, cy = 50;
-      const tipL = { x: cx + Math.cos(angRad - sRad) * L, y: cy + Math.sin(angRad - sRad) * L };
-      const tipR = { x: cx + Math.cos(angRad + sRad) * L, y: cy + Math.sin(angRad + sRad) * L };
-      return `<polygon class="${cls}" points="${cx},${cy} ${tipL.x.toFixed(2)},${tipL.y.toFixed(2)} ${tipR.x.toFixed(2)},${tipR.y.toFixed(2)}"/>`;
+      const L = 80;
+      const cx = 50 + (z.offsetX || 0);
+      const cy = 50 + (z.offsetY || 0);
+      const dir = angRad + extraAng;
+      const tipL = { x: cx + Math.cos(dir - sRad) * L, y: cy + Math.sin(dir - sRad) * L };
+      const tipR = { x: cx + Math.cos(dir + sRad) * L, y: cy + Math.sin(dir + sRad) * L };
+      return `<polygon class="${cls}" points="${cx.toFixed(2)},${cy.toFixed(2)} ${tipL.x.toFixed(2)},${tipL.y.toFixed(2)} ${tipR.x.toFixed(2)},${tipR.y.toFixed(2)}"/>`;
     }
     return "";
   }

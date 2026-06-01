@@ -95,6 +95,12 @@ function renderZones(){
     if(def.elementClass === "amenity"){
       el.classList.add("amenity");
     }
+    // Custom elements with a real footprint drop the boxy fill/border so
+    // the composite SVG inside is the only thing the user sees as the
+    // element's "shape" (the bounding rect is still clickable/draggable).
+    if(def.custom && def.shapes && def.shapes.length){
+      el.classList.add("shape-only");
+    }
     if(state.selectedId === def.id) el.classList.add("selected");
     if(z.included === false) el.classList.add("excluded");
     if(z.activeUse) el.classList.add("active-use-on");
@@ -329,14 +335,102 @@ function renderMetrics(){
   for(const md of METRIC_DEFS){
     const v = state.metrics[md.id] || 0;
     const pct = ((v-1)/4)*100;
+    const active = state.heatmapMetric === md.id;
     const div = document.createElement("div");
-    div.className = "metric";
+    div.className = "metric clickable" + (active ? " active" : "");
+    div.title = active ? "Click to hide heatmap" : "Click to show heatmap for this metric";
     div.innerHTML = `
-      <div class="lbl"><span>${md.label}</span><b>${v.toFixed(1)}/5 <span class="muted">·${(md.weight*100)|0}%</span></b></div>
+      <div class="lbl"><span>${md.label}${active ? ' <span class="hm-dot" title="Heatmap active">●</span>' : ''}</span><b>${v.toFixed(1)}/5 <span class="muted">·${(md.weight*100)|0}%</span></b></div>
       <div class="bar rev"><i style="width:${pct}%"></i></div>
     `;
+    div.addEventListener("click", ()=>{
+      state.heatmapMetric = state.heatmapMetric === md.id ? null : md.id;
+      render(true);
+    });
     body.appendChild(div);
   }
+}
+
+/* ------------------------------------------------------------------
+   10.7 HEATMAP — visualize how a metric varies across the stage.
+   Each metric defines a scalar field in [0, 1] (0 = cool/good,
+   1 = hot/risky). Click a metric in the sidebar to toggle.
+   ------------------------------------------------------------------ */
+function _heatmapField(key, x, y){
+  const Z = state.zones;
+  const defs = allZoneDefs();
+  const dist01 = (d, max) => Math.min(1, d / max);
+  function nearestDist(filter){
+    let best = Infinity;
+    for(const d of defs){
+      if(!filter(d)) continue;
+      const z = Z[d.id]; if(!z) continue;
+      const cx = z.x + z.w/2, cy = z.y + z.h/2;
+      const dd = Math.hypot(x - cx, y - cy);
+      if(dd < best) best = dd;
+    }
+    return best === Infinity ? 100 : best;
+  }
+  function densityWithin(radius, filter){
+    let n = 0;
+    for(const d of defs){
+      if(filter && !filter(d)) continue;
+      const z = Z[d.id]; if(!z) continue;
+      const cx = z.x + z.w/2, cy = z.y + z.h/2;
+      if(Math.hypot(x - cx, y - cy) < radius) n++;
+    }
+    return n;
+  }
+  switch(key){
+    case "safety":     return 1 - dist01(nearestDist(d=>d.risk >= 4), 35);
+    case "congestion": return Math.min(1, densityWithin(12, d=>!d.fixed) / 6);
+    case "toolRisk":   return dist01(nearestDist(d=>d.id === "mainDesk"), 70);
+    case "access":     return dist01(nearestDist(d=>d.cat === "exit"), 70);
+    case "workflow":   return dist01(nearestDist(d=>d.id === "asm1" || d.id === "asm2"), 55);
+    case "flex":       return Math.min(1, densityWithin(15) / 8);
+    case "beginner":   return dist01(nearestDist(d=>d.id === "craftland" || d.id === "entrance"), 60);
+  }
+  return 0;
+}
+
+function renderHeatmap(){
+  stageEl.querySelectorAll(".heatmap-overlay").forEach(n=>n.remove());
+  const key = state.heatmapMetric;
+  if(!key || !allZoneDefs().length) return;
+
+  const ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(ns, "svg");
+  svg.setAttribute("class", "heatmap-overlay");
+  svg.setAttribute("viewBox", "0 0 100 100");
+  svg.setAttribute("preserveAspectRatio", "none");
+  svg.style.position = "absolute";
+  svg.style.inset = "0";
+  svg.style.width = "100%";
+  svg.style.height = "100%";
+  svg.style.pointerEvents = "none";
+  svg.style.zIndex = "4";
+
+  const N = 28;
+  const cell = 100 / N;
+  for(let i = 0; i < N; i++){
+    for(let j = 0; j < N; j++){
+      const cx = (i + 0.5) * cell;
+      const cy = (j + 0.5) * cell;
+      const v = Math.max(0, Math.min(1, _heatmapField(key, cx, cy)));
+      if(v < 0.04) continue;
+      const r = document.createElementNS(ns, "rect");
+      r.setAttribute("x", (i * cell).toFixed(2));
+      r.setAttribute("y", (j * cell).toFixed(2));
+      r.setAttribute("width", cell.toFixed(2));
+      r.setAttribute("height", cell.toFixed(2));
+      // 120° (green / cool) → 0° (red / hot)
+      const hue = (1 - v) * 120;
+      r.setAttribute("fill", `hsl(${hue}, 80%, 50%)`);
+      r.setAttribute("fill-opacity", (v * 0.5).toFixed(2));
+      svg.appendChild(r);
+    }
+  }
+  stageEl.appendChild(svg);
 }
 
 function renderFlags(){
@@ -449,6 +543,110 @@ function renderConclusion(){
 }
 
 /* ------------------------------------------------------------------
+   10.5 VECTOR OVERLAY — kickback / material vectors as cones that
+   extend from the element's center until they hit a structural
+   wall/door (treated as opaque obstacles). Rendered at stage level
+   so the cone can sweep past the element's bounding box.
+   ------------------------------------------------------------------ */
+function _walls(){
+  // Collect structural walls and doors as obstacles in stage % coords.
+  return allZoneDefs()
+    .filter(d => d.elementClass === "structural" && (d.subtype === "wall" || d.subtype === "door"))
+    .map(d => {
+      const z = state.zones[d.id];
+      if(!z || z.included === false) return null;
+      return { x1:z.x, y1:z.y, x2:z.x+z.w, y2:z.y+z.h };
+    })
+    .filter(Boolean);
+}
+
+function _raycast(ox, oy, dx, dy, walls){
+  // Returns t (in % units along ray) of nearest wall hit, or stage edge.
+  let best = Infinity;
+  // Stage bounds at 0..100
+  const tBoundsX = dx > 0 ? (100 - ox) / dx : dx < 0 ? (0 - ox) / dx : Infinity;
+  const tBoundsY = dy > 0 ? (100 - oy) / dy : dy < 0 ? (0 - oy) / dy : Infinity;
+  best = Math.min(best, tBoundsX, tBoundsY);
+  // Walls: classic slab method on each rect.
+  for(const w of walls){
+    let t0 = 0, t1 = best;
+    const px = [-dx, dx, -dy, dy];
+    const qx = [ox - w.x1, w.x2 - ox, oy - w.y1, w.y2 - oy];
+    let hit = true;
+    for(let i = 0; i < 4; i++){
+      if(px[i] === 0){
+        if(qx[i] < 0){ hit = false; break; }
+      } else {
+        const t = qx[i] / px[i];
+        if(px[i] < 0){ if(t > t1) { hit = false; break; } if(t > t0) t0 = t; }
+        else         { if(t < t0) { hit = false; break; } if(t < t1) t1 = t; }
+      }
+    }
+    if(hit && t0 > 0 && t0 < best) best = t0;
+  }
+  return best;
+}
+
+function renderVectorOverlay(){
+  // Remove old overlay.
+  stageEl.querySelectorAll(".vector-overlay").forEach(n => n.remove());
+
+  const ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(ns, "svg");
+  svg.setAttribute("class", "vector-overlay");
+  svg.setAttribute("viewBox", "0 0 100 100");
+  svg.setAttribute("preserveAspectRatio", "none");
+  svg.style.position = "absolute";
+  svg.style.inset = "0";
+  svg.style.width  = "100%";
+  svg.style.height = "100%";
+  svg.style.pointerEvents = "none";
+  svg.style.zIndex = "5";
+
+  const walls = _walls();
+  const SAMPLES = 9; // rays across the cone
+
+  for(const def of allZoneDefs()){
+    const z = state.zones[def.id];
+    if(!z || z.included === false) continue;
+    const vectors = [
+      { v: def.kickbackVector,  cls: "vec-kb"  },
+      { v: def.materialVector,  cls: "vec-mat" },
+    ];
+    const eCx = z.x + z.w / 2;
+    const eCy = z.y + z.h / 2;
+    const baseAngle = (def.principalAxis && def.principalAxis.angle) || 0;
+    const rot = z.rotation || 0;
+    for(const {v, cls} of vectors){
+      if(!v || v.type !== "vector") continue;
+      const spread = v.angleSpread !== undefined ? v.angleSpread : 12;
+      // Per-vector origin offset (in element-local %; rotate with the element).
+      const ox = (v.offsetX || 0) * (z.w / 100);
+      const oy = (v.offsetY || 0) * (z.h / 100);
+      const rotRad = rot * Math.PI / 180;
+      const cosR = Math.cos(rotRad), sinR = Math.sin(rotRad);
+      const cx = eCx + (ox * cosR - oy * sinR);
+      const cy = eCy + (ox * sinR + oy * cosR);
+      const center = (baseAngle + (v.angle || 0) + rot) * Math.PI / 180;
+      const sRad = spread * Math.PI / 180;
+      const pts = [`${cx.toFixed(2)},${cy.toFixed(2)}`];
+      for(let i = 0; i < SAMPLES; i++){
+        const a = center - sRad + (2 * sRad) * (i / (SAMPLES - 1));
+        const dx = Math.cos(a), dy = Math.sin(a);
+        const t = _raycast(cx, cy, dx, dy, walls);
+        const px = cx + dx * t, py = cy + dy * t;
+        pts.push(`${px.toFixed(2)},${py.toFixed(2)}`);
+      }
+      const poly = document.createElementNS(ns, "polygon");
+      poly.setAttribute("class", cls);
+      poly.setAttribute("points", pts.join(" "));
+      svg.appendChild(poly);
+    }
+  }
+  stageEl.appendChild(svg);
+}
+
+/* ------------------------------------------------------------------
    11. MASTER RENDER
    ------------------------------------------------------------------ */
 function render(partial){
@@ -457,6 +655,8 @@ function render(partial){
     renderZones();
   }
   renderFlowLines();
+  renderVectorOverlay();
+  renderHeatmap();
   applyZoneFlagDecorations();
   renderMetrics();
   renderFlags();
@@ -467,4 +667,6 @@ function render(partial){
   const all = allZoneDefs();
   document.getElementById("zoneCountPill").textContent =
     `${all.length} zones · ${all.filter(d=>!d.fixed).length} movable`;
+  // Autosave a snapshot to localStorage (debounced inside).
+  if(typeof saveAppState === "function") saveAppState();
 }
