@@ -122,9 +122,13 @@
   line-height:1.15;
   box-shadow:0 2px 6px rgba(0,0,0,.4), inset 0 0 0 1px rgba(255,255,255,.06);
   transition:box-shadow .12s, transform .05s;
-  overflow:hidden;
+  /* Boundary wraps just the footprint; risk zones (operator radius,
+     shape, kickback rectangle) live in an inner SVG that may extend
+     beyond it without enlarging the click target. */
+  overflow:visible;
   backdrop-filter: blur(0.5px);
 }
+.zone .composite-svg{overflow:visible}
 .zone:hover{box-shadow:0 4px 12px rgba(0,0,0,.5), 0 0 0 2px rgba(90,169,255,.45)}
 .zone.dragging{cursor:grabbing;z-index:50;box-shadow:0 8px 22px rgba(0,0,0,.65), 0 0 0 2px var(--accent)}
 .zone.fixed{cursor:not-allowed;opacity:.95;border-style:dashed;background:rgba(160,170,190,.18)}
@@ -226,4 +230,18 @@
   fill:rgba(122,160,255,.32);
   stroke:rgba(220,235,255,.95);
   stroke-width:1.6;
+}
+
+/* Show Labels global toggle — when off, also hide each zone's
+   background, border, and shadow (the "boundary") so only the inner
+   composite-SVG footprint remains visible on stage. The label & badge
+   are already display:none via inline style from renderZones(). */
+body.no-labels .zone{
+  background:transparent !important;
+  border-color:transparent !important;
+  box-shadow:none !important;
+}
+body.no-labels .zone.selected{
+  border-color:var(--accent) !important;
+  box-shadow:0 0 0 2px var(--accent) !important;
 }

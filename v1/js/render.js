@@ -114,12 +114,13 @@ function renderZones(){
       el.style.transformOrigin = "center center";
     }
 
+    const labelHidden = state.showLabels === false;
     el.innerHTML = `
-      <div class="row1">
-        <span class="lbl" title="${def.label}">${def.short || def.label}</span>
+      <div class="row1" style="${labelHidden ? "display:none" : ""}">
+        <span class="lbl" title="${def.label}${def.description ? "\n" + def.description : ""}">${def.label}</span>
         <span class="warn-ico" data-ico></span>
       </div>
-      <div class="badge">R${def.risk} · ${RISK_TAGS[def.risk]}</div>
+      <div class="badge" style="${labelHidden ? "display:none" : ""}">R${def.risk} · ${RISK_TAGS[def.risk]}</div>
     `;
 
     // For custom elements with composite footprints, overlay an SVG
@@ -183,12 +184,19 @@ function buildCompositeSVG(def){
     }
   });
 
-  // 2) risk vectors (drawn before axis so axis sits on top)
+  // 2) risk vectors (drawn before axis so axis sits on top). Each kind
+  // now stores an array of entries; we also fall back to the legacy
+  // singular fields so old saves keep rendering.
   const axisAngle = (def.principalAxis && def.principalAxis.angle) || 0;
-  drawRiskZone(svg, def.operatorFootprint, "op", axisAngle, uid);
-  drawRiskZone(svg, def.maintenanceFootprint, "mt", axisAngle, uid);
-  drawRiskZone(svg, def.kickbackVector, "kb", axisAngle, uid);
-  drawRiskZone(svg, def.materialVector, "mat", axisAngle, uid);
+  const _eachZone = (arr, legacy, cls) => {
+    const list = Array.isArray(arr) && arr.length ? arr
+              : (legacy && legacy.type && legacy.type !== "none" ? [legacy] : []);
+    for(const e of list) drawRiskZone(svg, e, cls, axisAngle, uid);
+  };
+  _eachZone(def.operatorFootprints,    def.operatorFootprint,    "op");
+  _eachZone(def.maintenanceFootprints, def.maintenanceFootprint, "mt");
+  _eachZone(def.kickbackVectors,       def.kickbackVector,       "kb");
+  _eachZone(def.materialVectors,       def.materialVector,       "mat");
 
   // 3) principal axis
   if(def.principalAxis && def.principalAxis.length > 0){
@@ -606,13 +614,25 @@ function renderVectorOverlay(){
   const walls = _walls();
   const SAMPLES = 9; // rays across the cone
 
+  // Flatten each element's vector arrays into the (entry, class) list.
+  // Legacy singular fields are honored as a single-entry fallback.
+  function _collectVectors(def){
+    const out = [];
+    const push = (arr, legacy, cls) => {
+      const list = Array.isArray(arr) && arr.length ? arr
+                : (legacy ? [legacy] : []);
+      for(const v of list) if(v && v.type === "vector") out.push({ v, cls });
+    };
+    push(def.kickbackVectors, def.kickbackVector, "vec-kb");
+    push(def.materialVectors, def.materialVector, "vec-mat");
+    return out;
+  }
+
   for(const def of allZoneDefs()){
     const z = state.zones[def.id];
     if(!z || z.included === false) continue;
-    const vectors = [
-      { v: def.kickbackVector,  cls: "vec-kb"  },
-      { v: def.materialVector,  cls: "vec-mat" },
-    ];
+    const vectors = _collectVectors(def);
+    if(!vectors.length) continue;
     const eCx = z.x + z.w / 2;
     const eCy = z.y + z.h / 2;
     const baseAngle = (def.principalAxis && def.principalAxis.angle) || 0;

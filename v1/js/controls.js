@@ -35,6 +35,7 @@ function wireControls(){
   bindSwitch("showClearance","showClearance");
   bindSwitch("showFlow","showFlow");
   bindSwitch("showSidebar","showSidebar", applySidebarVisibility);
+  bindSwitch("showLabels","showLabels", applyLabelsVisibility);
 
   // Reset
   document.getElementById("resetBtn").addEventListener("click",()=>{
@@ -44,6 +45,180 @@ function wireControls(){
 
   // Export
   document.getElementById("exportBtn").addEventListener("click", exportProject);
+
+  // Analysis (placeholder)
+  const aBtn = document.getElementById("analysisBtn");
+  if(aBtn) aBtn.addEventListener("click", openAnalysisModal);
+
+  // Editable header metadata (Project / Lab / Build).
+  wireProjectHeader();
+
+  // Dismissible prototype banner.
+  const bannerEl = document.getElementById("prototypeBanner");
+  const bannerX  = document.getElementById("prototypeBannerClose");
+  if(bannerEl && state.bannerDismissed) bannerEl.classList.add("dismissed");
+  if(bannerX){
+    bannerX.addEventListener("click", ()=>{
+      bannerEl.classList.add("dismissed");
+      state.bannerDismissed = true;
+      if(typeof saveAppState === "function") saveAppState();
+    });
+  }
+
+  // Sidebar sort selector.
+  const sortSel = document.getElementById("elementsSort");
+  if(sortSel){
+    sortSel.value = state.elementsSort || "risk";
+    sortSel.addEventListener("change", (e)=>{
+      state.elementsSort = e.target.value;
+      renderElementsList();
+      if(typeof saveAppState === "function") saveAppState();
+    });
+  }
+
+  // Add / Remove alternative
+  const addAlt = document.getElementById("addAltBtn");
+  if(addAlt) addAlt.addEventListener("click", addAlternative);
+  const rmAlt = document.getElementById("removeAltBtn");
+  if(rmAlt) rmAlt.addEventListener("click", removeCurrentAlternative);
+}
+
+/* ------------------------------------------------------------------
+   ALTERNATIVES — preset tabs are user-extendable. "current" is the
+   immutable baseline and cannot be removed.
+   ------------------------------------------------------------------ */
+function rebuildTabs(){
+  const tabsEl = document.getElementById("tabs");
+  if(!tabsEl) return;
+  tabsEl.innerHTML = "";
+  const order = Object.keys(PRESETS);
+  for(const key of order){
+    const btn = document.createElement("button");
+    btn.dataset.preset = key;
+    btn.textContent = (PRESETS[key] && PRESETS[key].name) ||
+      (key === "current" ? "Current Layout" : key);
+    if(key === state.preset) btn.classList.add("active");
+    tabsEl.appendChild(btn);
+  }
+}
+
+function addAlternative(){
+  const baseName = prompt("Name this alternative:", "Alternative " + (Object.keys(PRESETS).length));
+  if(!baseName) return;
+  const slug = "alt_" + baseName.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
+  let key = slug, n = 2;
+  while(PRESETS[key]) { key = slug + "_" + n; n++; }
+  // Seed positions by cloning the currently-visible state.zones (so the
+  // user keeps editing where they left off, just under a new tab).
+  const zones = {};
+  for(const [id, z] of Object.entries(state.zones)){
+    zones[id] = { x: z.x, y: z.y, w: z.w, h: z.h, rotation: z.rotation || 0 };
+  }
+  PRESETS[key] = { name: baseName, zones };
+  loadPreset(key);
+  rebuildTabs();
+  evaluate(); render();
+}
+
+function removeCurrentAlternative(){
+  if(state.preset === "current"){
+    alert("Current Layout cannot be removed.");
+    return;
+  }
+  const name = (PRESETS[state.preset] && PRESETS[state.preset].name) || state.preset;
+  if(!confirm(`Remove alternative "${name}"?`)) return;
+  delete PRESETS[state.preset];
+  loadPreset("current");
+  rebuildTabs();
+  evaluate(); render();
+}
+
+/* ------------------------------------------------------------------
+   EDITABLE HEADER METADATA (Project / Lab / Build).
+   Each value lives on state.projectInfo, persists via autosave, and is
+   round-tripped through Export / Import Project.
+   ------------------------------------------------------------------ */
+function wireProjectHeader(){
+  const fields = [
+    { id: "piProject", key: "project" },
+    { id: "piLab",     key: "lab" },
+    { id: "piBuild",   key: "build" },
+  ];
+  if(!state.projectInfo) state.projectInfo = { project:"", lab:"", build:"" };
+  for(const f of fields){
+    const el = document.getElementById(f.id);
+    if(!el) continue;
+    el.textContent = state.projectInfo[f.key] || "";
+    el.addEventListener("input", ()=>{
+      state.projectInfo[f.key] = el.textContent.trim();
+      if(typeof saveAppState === "function") saveAppState();
+    });
+    el.addEventListener("keydown", (e)=>{
+      // Enter commits without inserting a newline.
+      if(e.key === "Enter"){ e.preventDefault(); el.blur(); }
+    });
+  }
+}
+
+function applyProjectHeader(){
+  // Re-paint the DOM from state.projectInfo (used after restore / import).
+  if(!state.projectInfo) return;
+  const map = { piProject:"project", piLab:"lab", piBuild:"build" };
+  for(const id of Object.keys(map)){
+    const el = document.getElementById(id);
+    if(el) el.textContent = state.projectInfo[map[id]] || "";
+  }
+}
+
+/* ------------------------------------------------------------------
+   ANALYSIS — placeholder modal. Specific analyses will plug in here.
+   ------------------------------------------------------------------ */
+function openAnalysisModal(){
+  let bd = document.getElementById("analysisBackdrop");
+  if(!bd){
+    bd = document.createElement("div");
+    bd.id = "analysisBackdrop";
+    bd.className = "modal-backdrop";
+    bd.innerHTML = `
+      <div class="modal" role="dialog">
+        <div class="modal-hdr">
+          <h2>Analysis</h2>
+          <span class="mh-sub">Layout-wide diagnostics</span>
+          <button class="mh-close" id="analysisClose">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="chooser-grid">
+            <div class="chooser-card disabled">
+              <div class="cc-icon">📊</div>
+              <div class="cc-title">Risk Compare</div>
+              <div class="cc-desc">Compare scores across all alternatives side by side. <i>Coming soon.</i></div>
+            </div>
+            <div class="chooser-card disabled">
+              <div class="cc-icon">🔥</div>
+              <div class="cc-title">Hotspot Report</div>
+              <div class="cc-desc">Aggregate the heatmap fields into a single ranked list of stage regions. <i>Coming soon.</i></div>
+            </div>
+            <div class="chooser-card disabled">
+              <div class="cc-icon">🚪</div>
+              <div class="cc-title">Egress Trace</div>
+              <div class="cc-desc">Path-find from every assembly zone to the nearest exit; flag bottlenecks. <i>Coming soon.</i></div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-ftr">
+          <button class="btn primary" id="analysisDone">Close</button>
+        </div>
+      </div>`;
+    document.body.appendChild(bd);
+    bd.addEventListener("click", (e)=>{
+      if(e.target.id === "analysisBackdrop" ||
+         e.target.id === "analysisClose"   ||
+         e.target.id === "analysisDone") {
+        bd.classList.remove("open");
+      }
+    });
+  }
+  bd.classList.add("open");
 }
 
 function exportJSON(){ exportProject(); } // legacy alias
@@ -58,21 +233,41 @@ function exportProject(){
   const elementDefs = _allDefs.map(d=>{
     // Round-trip everything the builder + import paths know about. Keys
     // not relevant to a given element-kind are simply omitted.
-    const base = { id:d.id, label:d.label, short:d.short, risk:d.risk };
+    const base = { id:d.id, label:d.label, risk:d.risk };
+    if(d.description)    base.description = d.description;
+    if(d.short && d.short !== d.label) base.short = d.short; // legacy carry
     if(d.cat)            base.cat = d.cat;
     if(d.beginner)       base.beginner = true;
     if(d.fixed)          base.fixed = true;
     if(Number.isFinite(d.w)) base.w = d.w;
     if(Number.isFinite(d.h)) base.h = d.h;
+    // Absolute footprint so the element keeps its real-world size when
+    // the floor-plan scale changes downstream.
+    if(Number.isFinite(d.wReal)) base.wReal = d.wReal;
+    if(Number.isFinite(d.hReal)) base.hReal = d.hReal;
+    if(d.realUnit)       base.realUnit = d.realUnit;
+    // Trash-can liner flag (only present on the amenity subtype).
+    if(d.hasBag !== undefined) base.hasBag = d.hasBag;
     if(d.elementClass)   base.elementClass = d.elementClass;
     if(d.subtype)        base.subtype = d.subtype;
     if(d.operationRisk)  base.operationRisk = d.operationRisk;
     if(d.shapes)         base.shapes = d.shapes;
     if(d.principalAxis)  base.principalAxis = d.principalAxis;
-    if(d.operatorFootprint && d.operatorFootprint.type !== "none")   base.operatorFootprint = d.operatorFootprint;
-    if(d.maintenanceFootprint && d.maintenanceFootprint.type !== "none") base.maintenanceFootprint = d.maintenanceFootprint;
-    if(d.kickbackVector && d.kickbackVector.type !== "none")         base.kickbackVector = d.kickbackVector;
-    if(d.materialVector && d.materialVector.type !== "none")         base.materialVector = d.materialVector;
+    // New array shape, with legacy singular fallback. Empty arrays are
+    // omitted to keep the JSON tidy.
+    const _arrOrLegacy = (arr, legacy) => {
+      if(Array.isArray(arr) && arr.length) return arr;
+      if(legacy && legacy.type && legacy.type !== "none") return [legacy];
+      return null;
+    };
+    const op = _arrOrLegacy(d.operatorFootprints,    d.operatorFootprint);
+    const mt = _arrOrLegacy(d.maintenanceFootprints, d.maintenanceFootprint);
+    const kb = _arrOrLegacy(d.kickbackVectors,       d.kickbackVector);
+    const ma = _arrOrLegacy(d.materialVectors,       d.materialVector);
+    if(op) base.operatorFootprints    = op;
+    if(mt) base.maintenanceFootprints = mt;
+    if(kb) base.kickbackVectors       = kb;
+    if(ma) base.materialVectors       = ma;
     if(d.variableAttrs)  base.variableAttrs = d.variableAttrs;
     if(d.coverage !== undefined) base.coverage = d.coverage;
     if(d.icon)           base.icon = d.icon;
@@ -92,6 +287,33 @@ function exportProject(){
     return [d.id, out];
   }).filter(([,v])=>v));
 
+  // Snapshot the currently-visible preset's edits back into PRESETS so
+  // every alternative exports with the freshest positions.
+  if(state.preset && PRESETS[state.preset]){
+    if(!PRESETS[state.preset].zones) PRESETS[state.preset].zones = {};
+    for(const [id, z] of Object.entries(state.zones)){
+      PRESETS[state.preset].zones[id] = {
+        x: z.x, y: z.y, w: z.w, h: z.h, rotation: z.rotation || 0,
+      };
+    }
+  }
+  // Strip down each preset to just label + positions for the export.
+  const presetsOut = {};
+  for(const [key, p] of Object.entries(PRESETS)){
+    presetsOut[key] = {
+      name: p.name || key,
+      zones: Object.fromEntries(
+        Object.entries(p.zones || {}).map(([id, z])=>{
+          const out = { x: +Number(z.x).toFixed(3), y: +Number(z.y).toFixed(3) };
+          if(Number.isFinite(z.w)) out.w = +Number(z.w).toFixed(3);
+          if(Number.isFinite(z.h)) out.h = +Number(z.h).toFixed(3);
+          if(z.rotation) out.rotation = +Number(z.rotation).toFixed(1);
+          return [id, out];
+        })
+      ),
+    };
+  }
+
   const fp = state.imports && state.imports.floorPlan;
   const project = {
     kind: "project",
@@ -103,8 +325,16 @@ function exportProject(){
       realLength: 1,
       unit: state.scale.unit,
     } : null,
+    activePreset: state.preset,
+    projectInfo: state.projectInfo ? { ...state.projectInfo } : undefined,
     elementDefs,
+    categories: (state.categories && state.categories.length) ? state.categories : undefined,
+    // Live state.zones for backward-compat (positions of the currently
+    // active preset). Tools that only know the old shape still work.
     zones,
+    // Multi-alternative payload: positions per preset key. Importers
+    // that know about this restore all alternatives at once.
+    presets: presetsOut,
     regions: REGIONS && REGIONS.length ? REGIONS : undefined,
   };
 
@@ -241,6 +471,7 @@ function applyConfig(cfg){
       stageHeightPx: heightPx,
     };
     state.units = cfg.scale.unit;
+    if(typeof refitElementsToScale === "function") refitElementsToScale();
   }
   state.config = { ...cfg };
 
@@ -391,16 +622,49 @@ function applyProject(project){
       regions: project.regions,
     });
   }
-  // 2. Positions + (optional) scale / floor-plan dims — go through the
-  //    config path so the status-bar plumbing fires the same way.
-  if(project.zones || project.scale || project.floorPlan){
+  // 1.5. User-defined categories (color + name swatches).
+  if(Array.isArray(project.categories) && project.categories.length){
+    state.categories = project.categories.map(c => ({...c}));
+  }
+  // 1.6. Editable header metadata.
+  if(project.projectInfo && typeof project.projectInfo === "object"){
+    state.projectInfo = { ...state.projectInfo, ...project.projectInfo };
+    if(typeof applyProjectHeader === "function") applyProjectHeader();
+  }
+  // 2. Per-alternative positions. If the project carries a presets map,
+  //    rebuild PRESETS entirely so every alternative tab shows up.
+  if(project.presets && typeof project.presets === "object"){
+    for(const k of Object.keys(PRESETS)) delete PRESETS[k];
+    for(const [key, p] of Object.entries(project.presets)){
+      PRESETS[key] = {
+        name: p.name || key,
+        zones: p.zones || {},
+      };
+    }
+    if(typeof rebuildTabs === "function") rebuildTabs();
+  }
+  // 3. Floor plan + scale (skip if absent — user can import floor plan
+  //    separately and hit "Skip scale" in the calibration modal).
+  if(project.scale || project.floorPlan){
     applyConfig({
       name: project.name,
-      zones: project.zones,
       scale: project.scale,
       floorPlan: project.floorPlan,
     });
   }
+  // 4. Active preset — load it so its positions hit state.zones AFTER
+  //    PRESETS has been rebuilt. Fall back to legacy top-level zones or
+  //    the first preset, whichever exists.
+  const preferred = project.activePreset && PRESETS[project.activePreset]
+    ? project.activePreset
+    : (Object.keys(PRESETS)[0] || "current");
+  if(PRESETS[preferred]){
+    loadPreset(preferred);
+  } else if(project.zones){
+    // Legacy single-preset payload: apply zones onto whatever's there.
+    applyConfig({ zones: project.zones });
+  }
+  if(typeof rebuildTabs === "function") rebuildTabs();
 }
 
 function importConfigFromFile(file){
@@ -642,20 +906,38 @@ function renderElementsList(){
   const listEl = document.getElementById("elementsList");
   if(!listEl) return;
   const all = allZoneDefs();
+  // Sync the sort <select> with current state (in case state was restored).
+  const sortSel = document.getElementById("elementsSort");
+  if(sortSel && sortSel.value !== (state.elementsSort || "risk")){
+    sortSel.value = state.elementsSort || "risk";
+  }
 
-  // Group by risk band (fixed first, then by risk ascending, then custom).
-  // Structural and amenity elements get their own groups at the bottom.
-  const structural = all.filter(d=>d.elementClass==="structural");
-  const amenity = all.filter(d=>d.elementClass==="amenity");
-  const groups = {
-    "Fixed":    all.filter(d=>d.fixed && d.elementClass!=="structural" && d.elementClass!=="amenity"),
-    "Low (R1)": all.filter(d=>!d.fixed && d.risk===1 && !d.elementClass),
-    "Moderate (R2-R3)": all.filter(d=>!d.fixed && (d.risk===2 || d.risk===3) && !d.elementClass),
-    "High (R4-R5)":     all.filter(d=>!d.fixed && (d.risk===4 || d.risk===5) && !d.elementClass),
-    "Circulation / Open": all.filter(d=>!d.fixed && (d.cat==="corridor"||d.cat==="open") && !d.elementClass),
-    "Structural": structural,
-    "Safety / Amenity": amenity,
-  };
+  const mode = state.elementsSort === "category" ? "category" : "risk";
+  let groups;
+  if(mode === "category"){
+    // One group per declared category; plus catch-alls for structural,
+    // amenity, and "Uncategorized".
+    const catMap = Object.fromEntries((state.categories||[]).map(c=>[c.id, c]));
+    groups = {};
+    for(const c of (state.categories || [])){
+      groups[c.label] = all.filter(d => d.cat === c.id && d.elementClass !== "structural" && d.elementClass !== "amenity");
+    }
+    groups["Uncategorized"]   = all.filter(d => (!d.cat || !catMap[d.cat]) && d.elementClass !== "structural" && d.elementClass !== "amenity");
+    groups["Structural"]      = all.filter(d => d.elementClass === "structural");
+    groups["Safety / Amenity"]= all.filter(d => d.elementClass === "amenity");
+  } else {
+    const structural = all.filter(d=>d.elementClass==="structural");
+    const amenity    = all.filter(d=>d.elementClass==="amenity");
+    groups = {
+      "Fixed":    all.filter(d=>d.fixed && d.elementClass!=="structural" && d.elementClass!=="amenity"),
+      "Low (R1)": all.filter(d=>!d.fixed && d.risk===1 && !d.elementClass),
+      "Moderate (R2-R3)": all.filter(d=>!d.fixed && (d.risk===2 || d.risk===3) && !d.elementClass),
+      "High (R4-R5)":     all.filter(d=>!d.fixed && (d.risk===4 || d.risk===5) && !d.elementClass),
+      "Circulation / Open": all.filter(d=>!d.fixed && (d.cat==="corridor"||d.cat==="open") && !d.elementClass),
+      "Structural": structural,
+      "Safety / Amenity": amenity,
+    };
+  }
 
   listEl.innerHTML = "";
   for(const [name, items] of Object.entries(groups)){
@@ -721,6 +1003,12 @@ function riskSwatchColor(def){
     5: {bg:"rgba(229,72,72,.65)",   border:"rgba(255,90,90,1)"},
   };
   return map[def.risk] || map[0];
+}
+
+function applyLabelsVisibility(){
+  // Toggle a body-level flag so the .zone CSS can hide its background /
+  // border / shadow (the "boundary") in lockstep with the label.
+  document.body.classList.toggle("no-labels", state.showLabels === false);
 }
 
 function applySidebarVisibility(){
@@ -790,9 +1078,10 @@ function refreshTransformPanel(){
   updateTransformPanelInputs();
 
   // Disable inputs for locked zones — still selectable for reference,
-  // but cannot be moved/resized/rotated until unlocked.
+  // but cannot be moved/rotated until unlocked. (Size is no longer
+  // editable here; use "Edit element settings" instead.)
   const locked = !!z.locked;
-  for(const id of ["tpX","tpY","tpW","tpH","tpRotRange","tpRotNum","tpResetSize","tpResetRot"]){
+  for(const id of ["tpX","tpY","tpRotRange","tpRotNum","tpResetRot"]){
     const el = document.getElementById(id);
     if(el) el.disabled = locked;
   }
@@ -814,18 +1103,12 @@ function updateTransformPanelInputs(){
   // Display in real units when a scale is calibrated, otherwise %.
   const xDisp = hasScale() ? +pctToUnits(z.x,'x').toFixed(2) : +z.x.toFixed(2);
   const yDisp = hasScale() ? +pctToUnits(z.y,'y').toFixed(2) : +z.y.toFixed(2);
-  const wDisp = hasScale() ? +pctToUnits(z.w,'x').toFixed(2) : +z.w.toFixed(2);
-  const hDisp = hasScale() ? +pctToUnits(z.h,'y').toFixed(2) : +z.h.toFixed(2);
   set("tpX", xDisp);
   set("tpY", yDisp);
-  set("tpW", wDisp);
-  set("tpH", hDisp);
   // Update section labels to reflect the active unit.
   const u = hasScale() ? state.scale.unit : "% of stage";
   const pLbl = document.getElementById("tpPosLbl");
-  const sLbl = document.getElementById("tpSizeLbl");
   if(pLbl) pLbl.textContent = `Position (${u})`;
-  if(sLbl) sLbl.textContent = `Size (${u})`;
   const rot = +(z.rotation || 0).toFixed(0);
   set("tpRotRange", rot);
   set("tpRotNum", rot);
@@ -851,8 +1134,9 @@ function applyTransformInput(field, raw){
     }
     if(field === "x") z.x = clamp(pct, 0, 100 - z.w);
     if(field === "y") z.y = clamp(pct, 0, 100 - z.h);
-    if(field === "w") z.w = clamp(pct, 1, 100 - z.x);
-    if(field === "h") z.h = clamp(pct, 1, 100 - z.y);
+    // w / h are no longer editable from the transform panel — bounding
+    // dimensions live on the element definition and update only when the
+    // user opens "Edit element settings" and changes the footprint.
   }
   evaluate();
   render();
@@ -880,8 +1164,6 @@ function wireTransformPanel(){
   document.getElementById("tpLock").addEventListener("click", toggleSelectedLock);
   document.getElementById("tpX").addEventListener("input", e => applyTransformInput("x", e.target.value));
   document.getElementById("tpY").addEventListener("input", e => applyTransformInput("y", e.target.value));
-  document.getElementById("tpW").addEventListener("input", e => applyTransformInput("w", e.target.value));
-  document.getElementById("tpH").addEventListener("input", e => applyTransformInput("h", e.target.value));
   document.getElementById("tpRotRange").addEventListener("input", e=>{
     document.getElementById("tpRotNum").value = e.target.value;
     applyTransformInput("rotation", e.target.value);
@@ -900,8 +1182,18 @@ function wireTransformPanel(){
       applyTransformInput("rotation", btn.dataset.rot);
     });
   });
-  document.getElementById("tpResetSize").addEventListener("click", resetSelectedSize);
   document.getElementById("tpResetRot").addEventListener("click", resetSelectedRotation);
+  // Open the element in its builder for full editing (footprint, risk
+  // zones, etc.). Routes by elementClass so structural/amenity go to
+  // their dedicated screens.
+  const editBtn = document.getElementById("tpEditSettings");
+  if(editBtn) editBtn.addEventListener("click", ()=>{
+    const id = state.selectedId;
+    if(!id) return;
+    if(typeof openElementBuilderForEdit === "function"){
+      openElementBuilderForEdit(id);
+    }
+  });
 
   // Drag the panel by its header. Position is stored on state so it
   // persists across reselections within the same session.
@@ -1025,6 +1317,7 @@ function applyFloorPlan(opts){
       stageHeightPx: opts.height,
     };
     state.units = opts.scale.unit;
+    if(typeof refitElementsToScale === "function") refitElementsToScale();
   }
   refreshStatusBars();
   render();

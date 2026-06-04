@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Invention Studio Layout Risk Simulator</title>
+<title>SPACE — Makerspace Layout &amp; Simulator</title>
 <link rel="stylesheet" href="css/theme.css">
 <link rel="stylesheet" href="css/layout.css">
 <link rel="stylesheet" href="css/components.css">
@@ -12,20 +12,21 @@
 <body>
 
 <header class="app">
-  <h1><span class="accent">Invention Studio</span> Layout Risk Simulator</h1>
+  <h1><span class="accent">SPACE</span> &mdash; Makerspace Layout &amp; Simulator</h1>
   <div class="sub">Interactive prototype for evaluating safety, accessibility, congestion, and workflow risk.</div>
   <div class="meta">
-    <span><b>Project:</b> Invention Studio Layout Optimization for Safety and Accessibility</span>
-    <span><b>Lab:</b> Georgia Tech MATRIX Lab</span>
-    <span><b>Build:</b> v0.5 prototype</span>
+    <span><b>Project:</b> <span class="hdr-edit" id="piProject" contenteditable="true" spellcheck="false" title="Click to edit"></span></span>
+    <span><b>Lab:</b> <span class="hdr-edit" id="piLab" contenteditable="true" spellcheck="false" title="Click to edit"></span></span>
+    <span><b>Build:</b> <span class="hdr-edit" id="piBuild" contenteditable="true" spellcheck="false" title="Click to edit"></span></span>
   </div>
 </header>
 
-<div class="notice-banner">
+<div class="notice-banner" id="prototypeBanner">
   <span>ⓘ</span>
   <span>
-    <b>Prototype notice.</b> This simulator uses the Matterport overhead view as a visual reference. Zone labels and boundaries are preliminary and intended to test the scoring framework — they should be calibrated using on-site measurements, staff feedback, SUMS, 3DPrinterOS, and observation data. Final positions and dimensions are not exact CAD.
+    <b>Prototype notice.</b> This simulator requires an image of the floor plan as a visual reference. Zone labels and boundaries are preliminary and intended to test the scoring framework — they should be calibrated using on-site measurements, staff feedback, observational data, and recorded data.
   </span>
+  <button class="notice-close" id="prototypeBannerClose" title="Dismiss this notice">×</button>
 </div>
 
 <div class="controls">
@@ -34,6 +35,8 @@
     <button data-preset="altA">Alternative A</button>
     <button data-preset="altB">Alternative B</button>
   </div>
+  <button class="btn ghost" id="addAltBtn" title="Add a new alternative layout (a copy of the current one).">+ Add Alt</button>
+  <button class="btn ghost" id="removeAltBtn" title="Remove the currently selected alternative (Current Layout cannot be removed).">× Remove Alt</button>
 
   <div class="ctrl">
     <label for="trafficMode">Traffic Mode</label>
@@ -64,7 +67,13 @@
     <div class="switch on" id="showSidebar"></div>
   </div>
 
+  <div class="ctrl" title="Show or hide the element name labels drawn on top of each zone.">
+    <span>Show Labels</span>
+    <div class="switch on" id="showLabels"></div>
+  </div>
+
   <div class="spacer"></div>
+  <button class="btn ghost" id="analysisBtn" title="Open analysis tools (coming soon).">Analysis</button>
   <input type="file" id="importImageInput" accept="image/png,image/jpeg,image/jpg,image/svg+xml,image/webp,image/gif,.png,.jpg,.jpeg,.svg,.webp,.gif,.dxf,.dwg" style="display:none" />
   <button class="btn primary" id="importProjectBtn" title="Wizard: pick a floor plan + calibrate scale, then pick a project JSON (elements + positions) — one-click setup.">Import Project</button>
   <button class="btn ghost" id="importImageBtn" title="Replace the layout background image. Accepts PNG, JPG, SVG, WEBP, GIF (DXF/DWG require external conversion).">Import Floor Plan</button>
@@ -112,7 +121,13 @@
   <!-- ============== LEFT PANEL ============== -->
   <div class="col col-left">
     <div class="card" style="flex:1;display:flex;flex-direction:column;min-height:0">
-      <h3>Elements <span class="pill" id="elementCountPill">0</span></h3>
+      <h3>
+        Elements <span class="pill" id="elementCountPill">0</span>
+        <select id="elementsSort" class="el-sort" title="Group the elements sidebar by…" style="margin-left:auto;background:var(--panel-2);color:var(--text-dim);border:1px solid var(--line);border-radius:4px;padding:2px 6px;font-size:10.5px;text-transform:none;letter-spacing:0;font-weight:500">
+          <option value="risk">By risk</option>
+          <option value="category">By category</option>
+        </select>
+      </h3>
       <div class="body" style="flex:1;display:flex;flex-direction:column;min-height:0">
         <div class="elements-list" id="elementsList"></div>
       </div>
@@ -198,19 +213,6 @@
               </div>
             </div>
             <div class="tp-section">
-              <div class="tp-section-lbl" id="tpSizeLbl">Size (% of stage)</div>
-              <div class="tp-row">
-                <div class="tp-field">
-                  <label for="tpW">Width</label>
-                  <input type="number" id="tpW" step="0.5" min="1" max="100" />
-                </div>
-                <div class="tp-field">
-                  <label for="tpH">Height</label>
-                  <input type="number" id="tpH" step="0.5" min="1" max="100" />
-                </div>
-              </div>
-            </div>
-            <div class="tp-section">
               <div class="tp-section-lbl">Rotation</div>
               <div class="rot-row">
                 <input type="range" id="tpRotRange" min="-180" max="180" step="1" value="0" />
@@ -228,8 +230,8 @@
               </div>
             </div>
             <div class="tp-btn-row">
-              <button class="btn ghost" id="tpResetSize" title="Restore default size">Reset Size</button>
               <button class="btn ghost" id="tpResetRot" title="Reset rotation to 0°">Reset Rotation</button>
+              <button class="btn primary" id="tpEditSettings" title="Open this element in the Element Builder">⚙ Edit element settings</button>
             </div>
           </div>
         </div>
@@ -336,6 +338,7 @@
         <button class="modal-tab" data-tab="footprint">Footprint &amp; Axis</button>
         <button class="modal-tab" data-tab="zones">Operator / Risk Zones</button>
         <button class="modal-tab" data-tab="attrs">Variable Attributes</button>
+        <button class="modal-tab" data-tab="export">Export</button>
       </div>
 
       <div class="modal-body">
@@ -352,10 +355,9 @@
             <label for="ebLabel">Name (full label)</label>
             <input type="text" id="ebLabel" placeholder="e.g. Vinyl Cutter Station" maxlength="60" />
           </div>
-          <div class="form-field">
-            <label for="ebShort">Short Label</label>
-            <input type="text" id="ebShort" placeholder="e.g. Vinyl" maxlength="20" />
-            <div class="help-text">Shown inside the zone overlay on the stage.</div>
+          <div class="form-field full">
+            <label for="ebDescription">Description (optional)</label>
+            <textarea id="ebDescription" placeholder="Notes about this tool — capabilities, materials, certifications required, etc." rows="2" maxlength="400" style="background:var(--panel-2);color:var(--text);border:1px solid var(--line);border-radius:5px;padding:6px 8px;font-size:12.5px;font-family:inherit;resize:vertical;min-height:40px"></textarea>
           </div>
           <div class="form-field">
             <label for="ebRisk">Display Risk Level</label>
@@ -379,23 +381,18 @@
             </select>
             <div class="help-text">Used by future tool-risk overlays and adjacency rules.</div>
           </div>
-          <div class="form-field">
-            <label for="ebW">Bounding Width (<span class="eb-unit" id="ebWUnit">% of stage</span>)</label>
-            <input type="number" id="ebW" min="0.1" step="0.5" value="8" />
+          <div class="form-field full" id="ebSizeReadout" style="background:var(--panel-2);border:1px solid var(--line);border-radius:5px;padding:6px 8px;font-size:11.5px;color:var(--text-dim)">
+            Footprint dimensions are derived from the shapes you add on the
+            <b>Footprint &amp; Axis</b> tab. Current size:
+            <b id="ebSizeReadoutValue" style="color:var(--text);font-family:ui-monospace,monospace">—</b>
           </div>
-          <div class="form-field">
-            <label for="ebH">Bounding Height (<span class="eb-unit" id="ebHUnit">% of stage</span>)</label>
-            <input type="number" id="ebH" min="0.1" step="0.5" value="6" />
-          </div>
-          <div class="form-field">
-            <label for="ebCat">Category (optional)</label>
-            <select id="ebCat">
-              <option value="">— Default —</option>
-              <option value="fixed">Fixed reference</option>
-              <option value="exit">Exit</option>
-              <option value="corridor">Corridor</option>
-              <option value="open">Open Area</option>
-            </select>
+          <div class="form-field full">
+            <label>Tool Group / Category</label>
+            <div id="ebCategoryPicker" class="eb-cat-picker"></div>
+            <div class="help-text">Pick an existing group or add a new one with its own color. Used for sidebar grouping and stage swatches.</div>
+            <!-- legacy hidden field so any older code that still reads ebCat
+                 by id receives the chosen categoryId without crashing -->
+            <input type="hidden" id="ebCat" value="" />
           </div>
           <div class="form-field">
             <label for="ebBeginner">Beginner-Friendly?</label>
@@ -511,60 +508,40 @@
         <div class="rz-block" id="rzOperator">
           <div class="rz-hdr">
             <span class="rz-swatch" style="background:rgba(58,167,118,.85)"></span>
-            <span class="rz-title">Operator Footprint</span>
-            <select class="rz-type" data-zone="operator">
-              <option value="none">None</option>
-              <option value="radius">Radius</option>
-              <option value="shape">Rectangle</option>
-              <option value="vector">Vector (along axis)</option>
-            </select>
+            <span class="rz-title">Operator Footprints</span>
+            <button type="button" class="btn ghost rz-add" data-zone="operator">+ Add</button>
           </div>
-          <div class="rz-help">Where the operator stands during normal use — usually in front of the principal axis.</div>
+          <div class="rz-help">Where the operator stands during normal use. Add one entry per stance/position.</div>
           <div class="rz-params" data-zone-params="operator"></div>
         </div>
 
         <div class="rz-block" id="rzMaintenance">
           <div class="rz-hdr">
             <span class="rz-swatch" style="background:rgba(122,160,255,.85)"></span>
-            <span class="rz-title">Maintenance Footprint</span>
-            <select class="rz-type" data-zone="maintenance">
-              <option value="none">None</option>
-              <option value="radius">Radius</option>
-              <option value="shape">Rectangle</option>
-              <option value="vector">Vector (along axis)</option>
-            </select>
+            <span class="rz-title">Maintenance Footprints</span>
+            <button type="button" class="btn ghost rz-add" data-zone="maintenance">+ Add</button>
           </div>
-          <div class="rz-help">Clearance required to access filters, panels, replace consumables, etc.</div>
+          <div class="rz-help">Clearance to access filters, panels, replace consumables. Add one per access side.</div>
           <div class="rz-params" data-zone-params="maintenance"></div>
         </div>
 
         <div class="rz-block" id="rzKickback">
           <div class="rz-hdr">
             <span class="rz-swatch" style="background:#ff5e6e"></span>
-            <span class="rz-title">Kickback / Risk-of-Injury Vector</span>
-            <select class="rz-type" data-zone="kickback">
-              <option value="none">None</option>
-              <option value="radius">Radius (omnidirectional risk)</option>
-              <option value="shape">Rectangle</option>
-              <option value="vector">Vector (directional)</option>
-            </select>
+            <span class="rz-title">Kickback / Risk-of-Injury Vectors</span>
+            <button type="button" class="btn ghost rz-add" data-zone="kickback">+ Add</button>
           </div>
-          <div class="rz-help">Path injury hazards could travel — e.g. wood kickback from a table saw, hot sparks from a grinder.</div>
+          <div class="rz-help">Paths injury hazards could travel — wood kickback, hot sparks. Add one cone per direction.</div>
           <div class="rz-params" data-zone-params="kickback"></div>
         </div>
 
         <div class="rz-block" id="rzMaterial">
           <div class="rz-hdr">
             <span class="rz-swatch" style="background:#e8a83b"></span>
-            <span class="rz-title">Material Loading / Queuing Vector</span>
-            <select class="rz-type" data-zone="material">
-              <option value="none">None</option>
-              <option value="radius">Radius</option>
-              <option value="shape">Rectangle</option>
-              <option value="vector">Vector (along axis)</option>
-            </select>
+            <span class="rz-title">Material Loading / Queuing Vectors</span>
+            <button type="button" class="btn ghost rz-add" data-zone="material">+ Add</button>
           </div>
-          <div class="rz-help">Clearance needed to feed stock in or stage materials (e.g. long stock for a horizontal bandsaw).</div>
+          <div class="rz-help">Clearance needed to feed stock in or stage materials. Add one per loading direction.</div>
           <div class="rz-params" data-zone-params="material"></div>
         </div>
           </div>
@@ -630,7 +607,26 @@
         </div>
       </div>
 
-      <!-- TAB 5 REMOVED — existing-list now lives on the chooser screen -->
+      <!-- TAB 5: EXPORT — download just this element as a tiny
+           elements-bundle JSON that can be re-imported elsewhere. -->
+      <div class="tab-panel" data-tab="export">
+        <div class="help-text" style="margin-bottom:10px">
+          Save the current element to a standalone JSON file. Re-import it from any other project via
+          <b>Element Builder &rarr; Import elements file</b>.
+        </div>
+        <div class="form-field full">
+          <label for="ebExportFilename">Filename</label>
+          <input type="text" id="ebExportFilename" placeholder="my-element.json" maxlength="80" />
+        </div>
+        <div class="form-field full" style="margin-top:8px">
+          <label>Preview</label>
+          <pre id="ebExportPreview" style="background:var(--panel-2);border:1px solid var(--line);border-radius:5px;padding:8px;font-size:11px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;max-height:240px;overflow:auto;white-space:pre-wrap;word-break:break-word;color:var(--text-dim);margin:0">—</pre>
+        </div>
+        <div class="tp-btn-row" style="margin-top:10px;gap:6px">
+          <button type="button" class="btn primary" id="ebExportDownload">⬇ Download element JSON</button>
+          <button type="button" class="btn ghost"   id="ebExportCopy">Copy to clipboard</button>
+        </div>
+      </div>
     </div>
     </div><!-- /screenTool -->
 
@@ -708,6 +704,13 @@
             <label for="amCoverage">Coverage radius (<span class="eb-unit" id="amCoverageUnit">% of stage</span>)</label>
             <input type="number" id="amCoverage" min="0" step="0.5" value="15" />
             <div class="help-text" id="amCoverageHelp">Distance this amenity is effective within.</div>
+          </div>
+          <div class="form-field full" id="amBagField" style="display:none">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+              <input type="checkbox" id="amHasBag" />
+              <span>Includes liner / bag</span>
+            </label>
+            <div class="help-text">Whether this trash can has a removable liner. Affects waste-flow / janitorial analyses.</div>
           </div>
         </div>
       </div>

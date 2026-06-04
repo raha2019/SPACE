@@ -10,6 +10,26 @@ const state = {
   showClearance:false,
   showFlow:true,
   showSidebar:true,
+  showLabels:true,
+  // Editable header metadata, persisted via autosave + export.
+  projectInfo:{
+    project: "Invention Studio Layout Optimization for Safety and Accessibility",
+    lab:     "Georgia Tech MATRIX Lab",
+    build:   "v0.5 prototype",
+  },
+  // How the Elements sidebar groups rows.
+  elementsSort: "risk",   // "risk" | "category"
+  // Dismissible prototype banner — true once the user closes it.
+  bannerDismissed: false,
+  // User-editable tool groups. id is a stable slug; color is the swatch.
+  categories:[
+    { id:"general",   label:"General",      color:"#5aa9ff" },
+    { id:"hand",      label:"Hand Tools",   color:"#7cc4ff" },
+    { id:"power",     label:"Power Tools",  color:"#f0b441" },
+    { id:"cutting",   label:"Cutting",      color:"#ef5d6f" },
+    { id:"finishing", label:"Finishing",    color:"#34c98a" },
+    { id:"assembly",  label:"Assembly",     color:"#a3cf4a" },
+  ],
   flags:[],
   metrics:{},
   score:0,
@@ -69,6 +89,10 @@ function saveAppState(){
           heatmapMetric: state.heatmapMetric,
           imports: state.imports,
           statusCollapsed: state.statusCollapsed,
+          bannerDismissed: state.bannerDismissed,
+          elementsSort: state.elementsSort,
+          projectInfo: state.projectInfo,
+          categories: state.categories,
           transformPanelPos: state.transformPanelPos,
         },
       };
@@ -103,6 +127,27 @@ function loadAppState(){
 
 function clearAppState(){
   try { localStorage.removeItem(_PERSIST_KEY); } catch(e){}
+}
+
+/* Recompute element % dimensions from their stored absolute (wReal/hReal)
+   so a scale change keeps each element's real-world footprint. Built-in
+   elements without wReal/hReal are left alone. Call after scale or
+   floor-plan changes. */
+function refitElementsToScale(){
+  if(!hasScale()) return;
+  function fit(def){
+    if(!def || !Number.isFinite(def.wReal) || !Number.isFinite(def.hReal)) return;
+    const newW = unitsToPct(def.wReal, "x");
+    const newH = unitsToPct(def.hReal, "y");
+    if(Number.isFinite(newW) && newW > 0) def.w = newW;
+    if(Number.isFinite(newH) && newH > 0) def.h = newH;
+    const z = state.zones[def.id];
+    if(z){ z.w = def.w; z.h = def.h; }
+  }
+  for(const d of state.customElements)     fit(d);
+  for(const d of state.structuralElements)  fit(d);
+  for(const d of state.amenityElements)     fit(d);
+  for(const d of ZONE_DEFS)                 fit(d);
 }
 
 /* ------------------------------------------------------------------

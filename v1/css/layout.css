@@ -161,7 +161,27 @@ header.app .meta b{color:var(--text-dim);font-weight:600}
   display:flex;gap:10px;align-items:flex-start;
 }
 .notice-banner b{color:var(--accent-2);font-weight:600}
+.notice-banner .notice-close{
+  margin-left:auto;background:transparent;border:0;color:var(--text-dim);
+  cursor:pointer;font-size:16px;line-height:1;padding:0 6px;border-radius:4px;
+  align-self:center;
+}
+.notice-banner .notice-close:hover{background:rgba(255,255,255,.08);color:var(--text)}
+.notice-banner.dismissed{display:none}
 
 /* tiny utility */
 .muted{color:var(--text-mute)}
 .kbd{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:10.5px;background:var(--panel-3);padding:1px 5px;border-radius:3px;color:var(--text-dim);border:1px solid var(--line)}
+
+/* Editable header metadata fields. */
+header.app .hdr-edit{
+  display:inline-block;color:var(--text-dim);font-weight:500;
+  border-bottom:1px dashed transparent;cursor:text;
+  padding:0 2px;border-radius:3px;outline:none;min-width:30px;
+}
+header.app .hdr-edit:hover{border-bottom-color:var(--line-2);background:rgba(255,255,255,.02)}
+header.app .hdr-edit:focus{
+  background:rgba(90,169,255,.08);
+  border-bottom-color:var(--accent);
+  color:var(--text);
+}

@@ -12,6 +12,11 @@ function init(){
   wireElementBuilder();
   wireProjectImportWizard();
   applySidebarVisibility();
+  if(typeof applyLabelsVisibility === "function") applyLabelsVisibility();
+  // Rebuild preset tabs after restore so user-added alternatives appear.
+  if(typeof rebuildTabs === "function") rebuildTabs();
+  // Repaint the editable header metadata from restored state.
+  if(typeof applyProjectHeader === "function") applyProjectHeader();
   // After a restore, push the cached floor plan back onto the stage
   // and adopt the imported aspect ratio (these live in the DOM, not state).
   if(restored && state.imports && state.imports.floorPlan){
