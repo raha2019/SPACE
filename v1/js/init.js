@@ -11,6 +11,7 @@ function init(){
   wireTransformPanel();
   wireElementBuilder();
   wireProjectImportWizard();
+  if(typeof wireSimulations === "function") wireSimulations();
   applySidebarVisibility();
   if(typeof applyLabelsVisibility === "function") applyLabelsVisibility();
   // Rebuild preset tabs after restore so user-added alternatives appear.

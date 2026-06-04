@@ -180,36 +180,67 @@ function openAnalysisModal(){
     bd.id = "analysisBackdrop";
     bd.className = "modal-backdrop";
     bd.innerHTML = `
-      <div class="modal" role="dialog">
+      <div class="modal wide" role="dialog">
         <div class="modal-hdr">
           <h2>Analysis</h2>
-          <span class="mh-sub">Layout-wide diagnostics</span>
+          <span class="mh-sub">Layout-wide diagnostics &middot; results land in the Simulation Results sidebar card and as heatmap overlays on the stage</span>
           <button class="mh-close" id="analysisClose">×</button>
         </div>
         <div class="modal-body">
+          <div class="chooser-section-hdr">Run a simulation</div>
           <div class="chooser-grid">
-            <div class="chooser-card disabled">
-              <div class="cc-icon">📊</div>
-              <div class="cc-title">Risk Compare</div>
-              <div class="cc-desc">Compare scores across all alternatives side by side. <i>Coming soon.</i></div>
+            <div class="chooser-card" data-sim="ada">
+              <div class="cc-icon">♿</div>
+              <div class="cc-title">ADA Check</div>
+              <div class="cc-desc">Corridor width + door clearance against ADA Standards (2010). BFS distance transform on a 0.5 ft grid. Heatmap shows fail / marginal / OK.</div>
             </div>
-            <div class="chooser-card disabled">
-              <div class="cc-icon">🔥</div>
-              <div class="cc-title">Hotspot Report</div>
-              <div class="cc-desc">Aggregate the heatmap fields into a single ranked list of stage regions. <i>Coming soon.</i></div>
-            </div>
-            <div class="chooser-card disabled">
+            <div class="chooser-card" data-sim="egress">
               <div class="cc-icon">🚪</div>
-              <div class="cc-title">Egress Trace</div>
-              <div class="cc-desc">Path-find from every assembly zone to the nearest exit; flag bottlenecks. <i>Coming soon.</i></div>
+              <div class="cc-title">Egress / Fire</div>
+              <div class="cc-desc">Multi-source BFS travel distance to nearest exit. Occupant load + exit capacity per NFPA 101. Dead-end detection.</div>
             </div>
+            <div class="chooser-card" data-sim="noise">
+              <div class="cc-icon">🔊</div>
+              <div class="cc-title">Noise (Monte Carlo)</div>
+              <div class="cc-desc">500-trial inverse-square noise map. Sources need <code>dba_active</code> + <code>schedule_prob</code> on their definitions. OSHA action / PEL bands.</div>
+            </div>
+            <div class="chooser-card" data-sim="all" style="border-color:rgba(90,169,255,.5)">
+              <div class="cc-icon">⚡</div>
+              <div class="cc-title">Run All</div>
+              <div class="cc-desc">Runs ADA, Egress, and Noise back-to-back. All three heatmaps render on the stage simultaneously and the results panel combines every section.</div>
+            </div>
+          </div>
+          <div class="chooser-section-hdr" style="margin-top:14px">Overlay control</div>
+          <div style="font-size:11.5px;color:var(--text-dim);margin-bottom:8px">
+            All three simulations require a calibrated floor-plan scale (Import Project &rarr; calibrate, or Import Floor Plan and click two points).
           </div>
         </div>
         <div class="modal-ftr">
+          <button class="btn ghost" id="analysisClear">Clear overlays</button>
           <button class="btn primary" id="analysisDone">Close</button>
         </div>
       </div>`;
     document.body.appendChild(bd);
+    // Card clicks fire the appropriate sim and close the modal so the
+    // stage heatmap is visible. Results stay in the sidebar card.
+    bd.querySelectorAll(".chooser-card[data-sim]").forEach(card => {
+      card.addEventListener("click", () => {
+        const which = card.dataset.sim;
+        bd.classList.remove("open");
+        // Defer one tick so the modal close transition starts before the
+        // sims (which can take a moment for the Monte Carlo noise pass).
+        setTimeout(() => {
+          if      (which === "ada"    && typeof runSingleSim === "function") runSingleSim("ada");
+          else if (which === "egress" && typeof runSingleSim === "function") runSingleSim("egress");
+          else if (which === "noise"  && typeof runSingleSim === "function") runSingleSim("noise");
+          else if (which === "all"    && typeof runAllSims    === "function") runAllSims();
+        }, 30);
+      });
+    });
+    bd.querySelector("#analysisClear").addEventListener("click", () => {
+      if(typeof clearSimOverlays === "function") clearSimOverlays();
+      bd.classList.remove("open");
+    });
     bd.addEventListener("click", (e)=>{
       if(e.target.id === "analysisBackdrop" ||
          e.target.id === "analysisClose"   ||
