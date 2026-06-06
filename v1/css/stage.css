@@ -89,6 +89,23 @@
   user-select:none;
   touch-action:none;
 }
+/* X/Y coordinate reference grid (Show Grid toggle). Sits above the floor
+   image but below zones; pointer-events:none so it never blocks dragging. */
+.stage .coord-grid{
+  position:absolute;inset:0;width:100%;height:100%;
+  pointer-events:none;z-index:2;
+}
+.stage .coord-grid .cg-line{stroke:rgba(122,160,255,.16);stroke-width:1;vector-effect:non-scaling-stroke}
+.stage .coord-grid .cg-major{stroke:rgba(122,160,255,.34)}
+.stage .cg-label{
+  position:absolute;z-index:2;pointer-events:none;
+  font-size:9px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+  color:rgba(196,210,240,.75);text-shadow:0 0 3px rgba(0,0,0,.8);
+}
+.stage .cg-label.cg-x{top:1px;transform:translateX(-50%)}
+.stage .cg-label.cg-y{left:2px;transform:translateY(-50%)}
+.stage .cg-label.cg-origin{left:2px;top:1px;font-weight:700;color:rgba(122,160,255,.9)}
+
 .stage::before{
   /* subtle vignette to make overlays pop */
   content:"";position:absolute;inset:0;pointer-events:none;
@@ -231,6 +248,24 @@
   stroke:rgba(220,235,255,.95);
   stroke-width:1.6;
 }
+
+/* Structural FLOOR areas are region labels, not solid objects. Render the
+   footprint with NO fill — just a dashed border outlining the area — so
+   heatmaps, simulation overlays, and elements underneath remain visible.
+   Must follow the .shape-only .fp rule above to win on source order. */
+.zone.struct-floor .composite-svg .fp{
+  fill:transparent;
+  stroke:rgba(58,167,118,.7);
+  stroke-width:1.4;
+}
+/* Drawn walls / doors / construction lines (polygon footprints from the
+   wall editor). Colour the composite polygon by type; later rules win on
+   source order over the generic .shape-only .fp blue above. */
+.zone.struct-wall .composite-svg .fp{ fill:rgba(220,225,235,.7); stroke:rgba(235,240,250,.9); stroke-width:1; }
+.zone.wall-sound .composite-svg .fp{ fill:rgba(109,177,255,.7); stroke:rgba(150,200,255,.95); stroke-width:1; }
+.zone.wall-false .composite-svg .fp{ fill:rgba(232,168,59,.6); stroke:rgba(240,180,90,.95); stroke-width:1; stroke-dasharray:4 2; }
+.zone.struct-door .composite-svg .fp{ fill:rgba(216,170,90,.55); stroke:rgba(230,190,120,.95); stroke-width:1; }
+.zone.struct-construction .composite-svg .fp{ fill:rgba(154,160,181,.12); stroke:rgba(154,160,181,.8); stroke-width:1.2; stroke-dasharray:3 2; }
 
 /* Show Labels global toggle — when off, also hide each zone's
    background, border, and shadow (the "boundary") so only the inner

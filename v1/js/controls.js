@@ -14,11 +14,8 @@ function wireControls(){
     render();
   });
 
-  // Traffic
-  document.getElementById("trafficMode").addEventListener("change",(e)=>{
-    state.trafficMode = e.target.value;
-    evaluate(); render();
-  });
+  // Traffic Mode lives in the Analysis modal now — its <select> is
+  // wired inside openAnalysisModal() since it's created lazily.
 
   // Switch helper
   function bindSwitch(id, key, after){
@@ -36,6 +33,7 @@ function wireControls(){
   bindSwitch("showFlow","showFlow");
   bindSwitch("showSidebar","showSidebar", applySidebarVisibility);
   bindSwitch("showLabels","showLabels", applyLabelsVisibility);
+  bindSwitch("showGrid","showGrid");
 
   // Reset
   document.getElementById("resetBtn").addEventListener("click",()=>{
@@ -46,9 +44,8 @@ function wireControls(){
   // Export
   document.getElementById("exportBtn").addEventListener("click", exportProject);
 
-  // Analysis (placeholder)
-  const aBtn = document.getElementById("analysisBtn");
-  if(aBtn) aBtn.addEventListener("click", openAnalysisModal);
+  // Analysis is now an always-visible sidebar widget instead of a toolbar
+  // button + modal. It is wired by wireAnalysisPanel() at init.
 
   // Editable header metadata (Project / Lab / Build).
   wireProjectHeader();
@@ -171,85 +168,123 @@ function applyProjectHeader(){
 }
 
 /* ------------------------------------------------------------------
-   ANALYSIS — placeholder modal. Specific analyses will plug in here.
+   ANALYSIS — always-visible sidebar widget (#analysisCard in index.html).
+   Replaces the old toolbar button + modal. Wires the run buttons, the
+   Live-mode toggle, traffic mode, and the resolution controls. Reuses the
+   existing sim helpers (runSingleSim / runAllSims / clearSimOverlays /
+   setSimResolution). Note: _simSetActive() already toggles .sim-active on
+   #simAdaBtn / #simEgressBtn / #simNoiseBtn and enables/disables
+   #simClearBtn, so those highlight automatically after a run.
    ------------------------------------------------------------------ */
-function openAnalysisModal(){
-  let bd = document.getElementById("analysisBackdrop");
-  if(!bd){
-    bd = document.createElement("div");
-    bd.id = "analysisBackdrop";
-    bd.className = "modal-backdrop";
-    bd.innerHTML = `
-      <div class="modal wide" role="dialog">
-        <div class="modal-hdr">
-          <h2>Analysis</h2>
-          <span class="mh-sub">Layout-wide diagnostics &middot; results land in the Simulation Results sidebar card and as heatmap overlays on the stage</span>
-          <button class="mh-close" id="analysisClose">×</button>
-        </div>
-        <div class="modal-body">
-          <div class="chooser-section-hdr">Run a simulation</div>
-          <div class="chooser-grid">
-            <div class="chooser-card" data-sim="ada">
-              <div class="cc-icon">♿</div>
-              <div class="cc-title">ADA Check</div>
-              <div class="cc-desc">Corridor width + door clearance against ADA Standards (2010). BFS distance transform on a 0.5 ft grid. Heatmap shows fail / marginal / OK.</div>
-            </div>
-            <div class="chooser-card" data-sim="egress">
-              <div class="cc-icon">🚪</div>
-              <div class="cc-title">Egress / Fire</div>
-              <div class="cc-desc">Multi-source BFS travel distance to nearest exit. Occupant load + exit capacity per NFPA 101. Dead-end detection.</div>
-            </div>
-            <div class="chooser-card" data-sim="noise">
-              <div class="cc-icon">🔊</div>
-              <div class="cc-title">Noise (Monte Carlo)</div>
-              <div class="cc-desc">500-trial inverse-square noise map. Sources need <code>dba_active</code> + <code>schedule_prob</code> on their definitions. OSHA action / PEL bands.</div>
-            </div>
-            <div class="chooser-card" data-sim="all" style="border-color:rgba(90,169,255,.5)">
-              <div class="cc-icon">⚡</div>
-              <div class="cc-title">Run All</div>
-              <div class="cc-desc">Runs ADA, Egress, and Noise back-to-back. All three heatmaps render on the stage simultaneously and the results panel combines every section.</div>
-            </div>
-          </div>
-          <div class="chooser-section-hdr" style="margin-top:14px">Overlay control</div>
-          <div style="font-size:11.5px;color:var(--text-dim);margin-bottom:8px">
-            All three simulations require a calibrated floor-plan scale (Import Project &rarr; calibrate, or Import Floor Plan and click two points).
-          </div>
-        </div>
-        <div class="modal-ftr">
-          <button class="btn ghost" id="analysisClear">Clear overlays</button>
-          <button class="btn primary" id="analysisDone">Close</button>
-        </div>
-      </div>`;
-    document.body.appendChild(bd);
-    // Card clicks fire the appropriate sim and close the modal so the
-    // stage heatmap is visible. Results stay in the sidebar card.
-    bd.querySelectorAll(".chooser-card[data-sim]").forEach(card => {
-      card.addEventListener("click", () => {
-        const which = card.dataset.sim;
-        bd.classList.remove("open");
-        // Defer one tick so the modal close transition starts before the
-        // sims (which can take a moment for the Monte Carlo noise pass).
-        setTimeout(() => {
-          if      (which === "ada"    && typeof runSingleSim === "function") runSingleSim("ada");
-          else if (which === "egress" && typeof runSingleSim === "function") runSingleSim("egress");
-          else if (which === "noise"  && typeof runSingleSim === "function") runSingleSim("noise");
-          else if (which === "all"    && typeof runAllSims    === "function") runAllSims();
-        }, 30);
-      });
-    });
-    bd.querySelector("#analysisClear").addEventListener("click", () => {
-      if(typeof clearSimOverlays === "function") clearSimOverlays();
-      bd.classList.remove("open");
-    });
-    bd.addEventListener("click", (e)=>{
-      if(e.target.id === "analysisBackdrop" ||
-         e.target.id === "analysisClose"   ||
-         e.target.id === "analysisDone") {
-        bd.classList.remove("open");
-      }
+function wireAnalysisPanel(){
+  const card = document.getElementById("analysisCard");
+  if(!card || card._analysisWired) return;
+  card._analysisWired = true;
+
+  const runSim = (which) => {
+    state.analysisLastSim = which;
+    if(typeof saveAppState === "function") saveAppState();
+    if(which === "all"){ if(typeof runAllSims === "function") runAllSims(); }
+    else if(typeof runSingleSim === "function") runSingleSim(which);
+    // Run All sets _simActive to null (which disables Clear); re-enable it
+    // since overlays are now showing.
+    const clr = document.getElementById("simClearBtn");
+    if(clr) clr.disabled = false;
+    _updateAnalysisActivePill(which);
+  };
+
+  const bind = (id, fn) => { const el = document.getElementById(id); if(el) el.addEventListener("click", fn); };
+  bind("simAdaBtn",    () => runSim("ada"));
+  bind("simEgressBtn", () => runSim("egress"));
+  bind("simNoiseBtn",  () => runSim("noise"));
+  bind("simAllBtn",    () => runSim("all"));
+  bind("simClearBtn",  () => {
+    if(typeof clearSimOverlays === "function") clearSimOverlays();
+    state.analysisLastSim = null;
+    if(typeof saveAppState === "function") saveAppState();
+    _updateAnalysisActivePill(null);
+  });
+
+  // Live-mode toggle (reuses the .switch component).
+  const live = document.getElementById("analysisLiveSwitch");
+  if(live){
+    live.classList.toggle("on", !!state.analysisLive);
+    live.addEventListener("click", () => {
+      state.analysisLive = !state.analysisLive;
+      live.classList.toggle("on", state.analysisLive);
+      if(typeof saveAppState === "function") saveAppState();
     });
   }
-  bd.classList.add("open");
+
+  // Traffic mode.
+  const tmSel = document.getElementById("analysisTrafficMode");
+  if(tmSel){
+    tmSel.value = state.trafficMode || "normal";
+    tmSel.addEventListener("change", () => {
+      state.trafficMode = tmSel.value;
+      evaluate(); render();
+      if(typeof saveAppState === "function") saveAppState();
+    });
+  }
+
+  // Resolution radios — picking one clears any numeric slider override.
+  card.querySelectorAll('input[name="simRes"]').forEach(r => {
+    r.checked = (r.value === (state.simResolution || "medium"));
+    r.addEventListener("change", () => {
+      if(!r.checked) return;
+      state.simResolution = r.value;
+      state.simResolutionFactor = null;
+      if(typeof setSimResolution === "function") setSimResolution(r.value);
+      const slider = document.getElementById("simResSlider");
+      if(slider) slider.value = (r.value === "coarse" ? 2 : r.value === "fine" ? 0.5 : 1);
+      _updateSimResReadout(card);
+      if(typeof saveAppState === "function") saveAppState();
+    });
+  });
+
+  // Numeric slider — takes precedence over the radios when used.
+  const slider = document.getElementById("simResSlider");
+  if(slider){
+    const f0 = Number.isFinite(state.simResolutionFactor) && state.simResolutionFactor > 0
+      ? state.simResolutionFactor
+      : (state.simResolution === "coarse" ? 2 : state.simResolution === "fine" ? 0.5 : 1);
+    slider.value = f0;
+    slider.addEventListener("input", () => {
+      const f = parseFloat(slider.value);
+      if(!Number.isFinite(f) || f <= 0) return;
+      state.simResolutionFactor = f;
+      state.simResolution = f >= 1.5 ? "coarse" : f <= 0.75 ? "fine" : "medium";
+      if(typeof setSimResolution === "function") setSimResolution(f);
+      card.querySelectorAll('input[name="simRes"]').forEach(r => { r.checked = (r.value === state.simResolution); });
+      _updateSimResReadout(card);
+      if(typeof saveAppState === "function") saveAppState();
+    });
+  }
+
+  _updateSimResReadout(card);
+  _updateAnalysisActivePill(state.analysisLastSim);
+}
+
+/* Small status pill in the Analysis widget header showing the last sim run. */
+function _updateAnalysisActivePill(which){
+  const pill = document.getElementById("analysisActivePill");
+  if(!pill) return;
+  const label = { ada:"ADA", egress:"Egress", noise:"Noise", all:"All" }[which] || "Idle";
+  pill.textContent = label;
+}
+
+/* Translate the current resolution factor into a human-friendly readout
+   for the Analysis modal slider. Pulls the ADA grid res as a proxy
+   since all three sims scale together. */
+function _updateSimResReadout(bd){
+  const out = bd.querySelector("#simResReadout");
+  if(!out) return;
+  const f = Number.isFinite(state.simResolutionFactor) && state.simResolutionFactor > 0
+    ? state.simResolutionFactor
+    : (state.simResolution === "coarse" ? 2 : state.simResolution === "fine" ? 0.5 : 1);
+  // ADA's base resolution is 0.5 ft per cell.
+  const cellFt = (0.5 * f).toFixed(2);
+  out.textContent = `${f.toFixed(2)}× · ~${cellFt} ft/cell`;
 }
 
 function exportJSON(){ exportProject(); } // legacy alias
@@ -300,6 +335,9 @@ function exportProject(){
     if(kb) base.kickbackVectors       = kb;
     if(ma) base.materialVectors       = ma;
     if(d.variableAttrs)  base.variableAttrs = d.variableAttrs;
+    if(Number.isFinite(d.dba_active))    base.dba_active    = d.dba_active;
+    if(Number.isFinite(d.schedule_prob)) base.schedule_prob = d.schedule_prob;
+    if(Number.isFinite(d.stcOverride))   base.stcOverride   = d.stcOverride;
     if(d.coverage !== undefined) base.coverage = d.coverage;
     if(d.icon)           base.icon = d.icon;
     if(d.countWalls !== undefined) base.countWalls = d.countWalls;
@@ -973,9 +1011,112 @@ function renderElementsList(){
   listEl.innerHTML = "";
   for(const [name, items] of Object.entries(groups)){
     if(!items.length) continue;
+    // Group header gets bulk inc + activeUse toggles. State derives from
+    // the members: header-inc is "on" if every row in the group is
+    // included; header-act is "on" if every row has activeUse set.
+    const allInc = items.every(d => (state.zones[d.id] && state.zones[d.id].included !== false));
+    const allAct = items.every(d => !!(state.zones[d.id] && state.zones[d.id].activeUse));
     const hdr = document.createElement("div");
     hdr.className = "el-group-hdr";
-    hdr.textContent = name;
+    // When sorted by category, identify which header maps to which
+    // state.categories entry so we can drag-reorder it from the sidebar.
+    const matchingCat = (mode === "category")
+      ? (state.categories || []).find(c => c.label === name)
+      : null;
+    const gripHTML = matchingCat ? '<span class="el-group-grip" aria-hidden="true">⋮⋮</span>' : "";
+    // Up/down reorder arrows for category headers — a reliable alternative
+    // to drag-and-drop for swapping category order (which also drives stage
+    // z-index layering). Disabled at the ends of the category list.
+    const catIdx   = matchingCat ? (state.categories || []).findIndex(c => c.id === matchingCat.id) : -1;
+    const catCount = (state.categories || []).length;
+    const reorderHTML = matchingCat ? `
+      <span class="el-cat-reorder">
+        <button type="button" class="el-cat-move" data-move="up"   data-cat="${matchingCat.id}" title="Move category up"   ${catIdx <= 0 ? "disabled" : ""}>▲</button>
+        <button type="button" class="el-cat-move" data-move="down" data-cat="${matchingCat.id}" title="Move category down" ${catIdx >= catCount - 1 ? "disabled" : ""}>▼</button>
+      </span>` : "";
+    hdr.innerHTML = `
+      ${gripHTML}
+      <span class="el-group-name">${name}</span>
+      ${reorderHTML}
+      <span class="el-group-tog ${allInc ? "on" : ""}" data-grp-tog="included" title="Include/exclude every element in this group">
+        <span class="et-dot"></span><span class="et-lbl">inc</span>
+      </span>
+      <span class="el-group-tog ${allAct ? "on" : ""}" data-grp-tog="activeUse" title="Apply active-use expansion to every element in this group">
+        <span class="et-dot"></span><span class="et-lbl">act</span>
+      </span>
+    `;
+    hdr.querySelectorAll(".el-group-tog").forEach(tog => {
+      tog.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const key = tog.dataset.grpTog;
+        const currentlyAllOn = key === "included" ? allInc : allAct;
+        const target = !currentlyAllOn;
+        for(const d of items){
+          const z = state.zones[d.id]; if(!z) continue;
+          if(key === "included")  z.included  = target;
+          else if(key === "activeUse") z.activeUse = target;
+        }
+        evaluate(); render();
+      });
+    });
+    // Up/down arrow reorder — swap this category with its neighbor in
+    // state.categories (drives both sidebar order and stage z-index).
+    hdr.querySelectorAll(".el-cat-move").forEach(btn => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const id  = btn.dataset.cat;
+        const dir = btn.dataset.move === "up" ? -1 : 1;
+        const arr = state.categories || [];
+        const i = arr.findIndex(c => c.id === id);
+        const j = i + dir;
+        if(i < 0 || j < 0 || j >= arr.length) return;
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+        renderElementsList();
+        if(typeof render === "function") render();
+        if(typeof saveAppState === "function") saveAppState();
+      });
+    });
+    // Drag-to-reorder for category-sorted headers. The dragged header's
+    // matching state.categories entry moves to the drop target's slot;
+    // stage layering follows the new order via the existing z-index hook.
+    if(matchingCat){
+      hdr.draggable = true;
+      hdr.dataset.catId = matchingCat.id;
+      hdr.classList.add("draggable");
+      hdr.addEventListener("dragstart", (e) => {
+        e.dataTransfer.setData("text/cat-id", matchingCat.id);
+        e.dataTransfer.effectAllowed = "move";
+        hdr.classList.add("dragging");
+      });
+      hdr.addEventListener("dragend", () => hdr.classList.remove("dragging"));
+      // dragenter must also preventDefault for the drop to register in some browsers.
+      hdr.addEventListener("dragenter", (e) => {
+        if(e.dataTransfer.types.includes("text/cat-id")) e.preventDefault();
+      });
+      hdr.addEventListener("dragover", (e) => {
+        if(e.dataTransfer.types.includes("text/cat-id")){
+          e.preventDefault();
+          e.dataTransfer.dropEffect = "move";
+          hdr.classList.add("drop-target");
+        }
+      });
+      hdr.addEventListener("dragleave", () => hdr.classList.remove("drop-target"));
+      hdr.addEventListener("drop", (e) => {
+        e.preventDefault();
+        hdr.classList.remove("drop-target");
+        const fromId = e.dataTransfer.getData("text/cat-id");
+        if(!fromId || fromId === matchingCat.id) return;
+        const arr = state.categories;
+        const fromIdx = arr.findIndex(x => x.id === fromId);
+        const toIdx   = arr.findIndex(x => x.id === matchingCat.id);
+        if(fromIdx < 0 || toIdx < 0) return;
+        const [moved] = arr.splice(fromIdx, 1);
+        arr.splice(toIdx, 0, moved);
+        renderElementsList();
+        if(typeof render === "function") render();
+        if(typeof saveAppState === "function") saveAppState();
+      });
+    }
     listEl.appendChild(hdr);
     for(const def of items){
       const z = state.zones[def.id] || {};
@@ -1034,6 +1175,58 @@ function riskSwatchColor(def){
     5: {bg:"rgba(229,72,72,.65)",   border:"rgba(255,90,90,1)"},
   };
   return map[def.risk] || map[0];
+}
+
+/* Drag the divider between the left sidebar and the stage to resize
+   the sidebar. Width is clamped to [180, 60% of viewport] and persists
+   via state.leftColWidth so reloads remember the choice. */
+function wireLeftColResizer(){
+  // Whole-column width resizing was retired in favor of per-widget resizing
+  // (each card body is vertically resizable). Left as a no-op so init() and
+  // any persisted state.leftColWidth no longer force a fixed column width.
+  return;
+  /* eslint-disable no-unreachable */
+  const resizer = document.getElementById("leftColResizer");
+  const grid    = document.getElementById("appGrid");
+  if(!resizer || !grid) return;
+
+  const applyWidth = (w) => {
+    const max = Math.max(220, Math.floor(window.innerWidth * 0.6));
+    const clamped = Math.max(180, Math.min(max, w));
+    grid.style.setProperty("--left-col-w", clamped + "px");
+    state.leftColWidth = clamped;
+  };
+
+  // Restore previous width on first run.
+  if(Number.isFinite(state.leftColWidth) && state.leftColWidth > 0){
+    grid.style.setProperty("--left-col-w", state.leftColWidth + "px");
+  }
+
+  let dragging = false;
+  let startX = 0, startW = 0;
+  resizer.addEventListener("pointerdown", (e) => {
+    dragging = true;
+    try { resizer.setPointerCapture(e.pointerId); } catch(_){}
+    resizer.classList.add("dragging");
+    const leftCol = document.querySelector(".col.col-left");
+    startX = e.clientX;
+    startW = leftCol ? leftCol.getBoundingClientRect().width : 320;
+    document.body.style.cursor = "col-resize";
+    e.preventDefault();
+  });
+  resizer.addEventListener("pointermove", (e) => {
+    if(!dragging) return;
+    applyWidth(startW + (e.clientX - startX));
+  });
+  const stop = () => {
+    if(!dragging) return;
+    dragging = false;
+    resizer.classList.remove("dragging");
+    document.body.style.cursor = "";
+    if(typeof saveAppState === "function") saveAppState();
+  };
+  resizer.addEventListener("pointerup",     stop);
+  resizer.addEventListener("pointercancel", stop);
 }
 
 function applyLabelsVisibility(){

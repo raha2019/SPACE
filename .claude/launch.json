@@ -1,0 +1,14 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "space-v1",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-c",
+        "import http.server as H, os; os.chdir('v1'); C=type('C',(H.SimpleHTTPRequestHandler,),{'end_headers':lambda s:(s.send_header('Cache-Control','no-store, max-age=0'), H.SimpleHTTPRequestHandler.end_headers(s))}); H.ThreadingHTTPServer.allow_reuse_address=True; print('serving v1 on 8123 (no-store)'); H.ThreadingHTTPServer(('',8123),C).serve_forever()"
+      ],
+      "port": 8123
+    }
+  ]
+}

@@ -233,13 +233,23 @@ function simShowEgressResults(r) {
     r.deadEnd.toFixed(0) + " ft (limit: " + NFPA_MAX_DEAD_END_FT + " ft)",
     deadEndOk ? "good" : "bad"
   );
+  if(r.fireExt){
+    const pct = r.fireExt.coveragePct.toFixed(1);
+    h += _simRow(
+      "Fire extinguishers (coverage)",
+      r.fireExt.count + " unit" + (r.fireExt.count !== 1 ? "s" : "") +
+        " · " + pct + "% of stage within reach",
+      r.fireExt.count > 0 ? (r.fireExt.coveragePct >= 60 ? "good" : "warn") : "bad"
+    );
+  }
   h += '</div>';
 
   h += '<div class="sim-legend">' +
     '<span class="sim-swatch" style="background:rgba(50,140,240,0.7)"></span>Exit ' +
     '<span class="sim-swatch" style="background:rgba(55,185,55,0.55)"></span>Near ' +
     '<span class="sim-swatch" style="background:rgba(230,140,40,0.65)"></span>Mid ' +
-    '<span class="sim-swatch" style="background:rgba(220,50,50,0.65)"></span>Far/Fail' +
+    '<span class="sim-swatch" style="background:rgba(220,50,50,0.65)"></span>Far/Fail ' +
+    '<span class="sim-swatch" style="background:rgba(80,220,140,0.45)"></span>Fire-ext coverage' +
     '</div>';
 
   _simShowCard(h);
@@ -353,6 +363,23 @@ function _updatePenaltyCard() {
     '<div class="sim-disclaimer">Advisory only. Does not modify the main risk score above.</div>';
 }
 
+/* Adjust the grid resolution of every sim from the Analysis modal.
+   Accepts either a named preset ("coarse" | "medium" | "fine") or a
+   numeric multiplier — small = finer/slower, large = coarser/faster. */
+function setSimResolution(modeOrFactor){
+  let factor;
+  if(typeof modeOrFactor === "number" && isFinite(modeOrFactor) && modeOrFactor > 0){
+    factor = modeOrFactor;
+  } else {
+    factor = modeOrFactor === "coarse" ? 2
+           : modeOrFactor === "fine"   ? 0.5
+           : 1;
+  }
+  ADA_GRID_RES_FT    = Math.max(0.05, 0.5 * factor);
+  EGRESS_GRID_RES_FT = Math.max(0.10, 1.0 * factor);
+  NOISE_GRID_RES_FT  = Math.max(0.25, 2.0 * factor);
+}
+
 /* In v1 the three sims are invoked from the Analysis modal cards (not
    from toolbar buttons). The helpers below are what those cards call.
    wireSimulations() just makes sure the canvas overlays exist in the
@@ -361,6 +388,14 @@ function wireSimulations() {
   simGetCanvas("ada");
   simGetCanvas("egress");
   simGetCanvas("noise");
+  // Pick up any persisted resolution choice (loaded by loadAppState).
+  if(state){
+    if(Number.isFinite(state.simResolutionFactor) && state.simResolutionFactor > 0){
+      setSimResolution(state.simResolutionFactor);
+    } else if(state.simResolution){
+      setSimResolution(state.simResolution);
+    }
+  }
 }
 
 function runSingleSim(name) {
@@ -396,4 +431,19 @@ function clearSimOverlays() {
   if (card) card.style.display = "none";
   const penCard = document.getElementById(SIM_PENALTY_CARD_ID);
   if (penCard) penCard.style.display = "none";
+}
+
+/* Live mode hook — called from the end of render() with debouncing so
+   drags don't fire one analysis per pointermove. When the user toggles
+   "Live mode" in the Analysis modal, this re-runs the last analysis
+   ~250ms after the layout stops changing. */
+let _simLiveTimer = null;
+function triggerLiveSim() {
+  if (!state || !state.analysisLive || !state.analysisLastSim) return;
+  if (_simLiveTimer) clearTimeout(_simLiveTimer);
+  _simLiveTimer = setTimeout(() => {
+    const which = state.analysisLastSim;
+    if      (which === "all")    runAllSims();
+    else if (which === "ada" || which === "egress" || which === "noise") runSingleSim(which);
+  }, 250);
 }

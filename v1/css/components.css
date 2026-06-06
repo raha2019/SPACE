@@ -44,13 +44,39 @@
 /* ============================================================
    ELEMENTS SIDEBAR (left column "Elements" card)
    ============================================================ */
-.elements-list{display:flex;flex-direction:column;gap:4px;max-height:480px;overflow:auto;padding-right:2px}
-.elements-list::-webkit-scrollbar{width:8px}
-.elements-list::-webkit-scrollbar-thumb{background:var(--line-2);border-radius:4px}
+/* The list flows naturally; the card body (#elementsBody) is the single
+   scroll + vertical-resize container, so the Elements widget behaves like
+   the other resizable cards. */
+.elements-list{display:flex;flex-direction:column;gap:4px;padding-right:2px}
+/* Default height for the Elements widget; drag the bottom-right handle
+   (resize:vertical from .card .body) to make it taller/shorter. */
+#elementsBody{height:300px}
+#elementsBody::-webkit-scrollbar{width:8px}
+#elementsBody::-webkit-scrollbar-thumb{background:var(--line-2);border-radius:4px}
 .el-group-hdr{
+  display:flex;align-items:center;gap:6px;
   font-size:10px;letter-spacing:.5px;text-transform:uppercase;
   color:var(--text-mute);padding:8px 4px 2px;font-weight:600;
 }
+.el-group-hdr .el-group-name{flex:1}
+.el-group-hdr .el-group-tog{
+  display:flex;flex-direction:column;align-items:center;gap:1px;
+  cursor:pointer;user-select:none;
+}
+.el-group-hdr .el-group-tog .et-dot{
+  width:14px;height:8px;border-radius:5px;
+  background:var(--panel);border:1px solid var(--line-2);
+  position:relative;transition:background .15s, border-color .15s;
+}
+.el-group-hdr .el-group-tog .et-dot::after{
+  content:"";position:absolute;left:1px;top:0px;
+  width:6px;height:6px;border-radius:50%;
+  background:var(--text-mute);transition:left .15s, background .15s;
+}
+.el-group-hdr .el-group-tog.on .et-dot{background:rgba(90,169,255,.4);border-color:var(--accent)}
+.el-group-hdr .el-group-tog.on .et-dot::after{left:7px;background:var(--accent)}
+.el-group-hdr .el-group-tog .et-lbl{font-size:8px;letter-spacing:.3px;color:var(--text-mute);text-transform:uppercase}
+.el-group-hdr .el-group-tog.on .et-lbl{color:var(--accent)}
 .el-row{
   display:flex;align-items:center;gap:8px;padding:6px 8px;
   background:var(--panel-2);border:1px solid var(--line);
@@ -367,6 +393,20 @@
   font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
 }
 
+/* PPE / required-safety-practices checklist */
+.ppe-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:6px}
+@media(max-width:640px){.ppe-grid{grid-template-columns:1fr}}
+.ppe-chip{
+  display:flex;align-items:center;gap:7px;cursor:pointer;
+  background:var(--panel-2);border:1px solid var(--line);border-radius:5px;
+  padding:6px 8px;font-size:12px;color:var(--text-dim);
+}
+.ppe-chip:hover{border-color:var(--line-2)}
+.ppe-chip input{accent-color:var(--accent);margin:0}
+.ppe-chip:has(input:checked){
+  border-color:var(--accent);background:rgba(90,169,255,.12);color:var(--text);
+}
+
 /* Variable attributes block */
 .var-attrs{display:grid;grid-template-columns:repeat(2, 1fr);gap:12px}
 .va-field{display:flex;flex-direction:column;gap:4px}
@@ -479,6 +519,86 @@
 /* ============================================================
    SCALE CALIBRATION MODAL
    ============================================================ */
+/* ============================================================
+   ANALYSIS SIDEBAR WIDGET (#analysisCard)
+   ============================================================ */
+.an-section{margin-bottom:14px}
+.an-section:last-child{margin-bottom:0}
+.an-label{
+  font-size:10px;letter-spacing:.5px;text-transform:uppercase;
+  color:var(--text-mute);font-weight:600;margin-bottom:6px;
+}
+.an-btn-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:6px}
+.an-run{font-size:11.5px;padding:7px 4px;text-align:center;white-space:nowrap}
+.an-run.an-run-all{grid-column:1 / -1;border-color:rgba(90,169,255,.5)}
+/* .sim-active is toggled by _simSetActive() in sim_ui.js after a run. */
+.an-run.sim-active{background:var(--accent);border-color:var(--accent);color:#0a1220;font-weight:600}
+.an-clear{width:100%;font-size:11.5px}
+.an-clear:disabled{opacity:.4;cursor:default}
+.an-toggle{justify-content:space-between;width:100%;margin-bottom:8px}
+.an-field{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:12px;color:var(--text-dim)}
+.an-field select{
+  background:var(--panel-2);color:var(--text);border:1px solid var(--line);
+  border-radius:4px;padding:4px 6px;font-size:12px;
+}
+.an-radios{display:flex;gap:10px;flex-wrap:wrap;font-size:12px;color:var(--text-dim);margin-bottom:6px}
+.an-radios label{display:flex;align-items:center;gap:4px;cursor:pointer}
+.an-slider-row{display:flex;align-items:center;gap:8px;font-size:10.5px;color:var(--text-mute)}
+.an-slider-row input[type=range]{flex:1}
+.an-readout{font-size:11px;font-family:ui-monospace,monospace;color:var(--text-dim);text-align:right;margin-top:4px}
+.an-note{font-size:11px;color:var(--text-mute);line-height:1.5;border-top:1px solid var(--line);padding-top:8px}
+
+/* ============================================================
+   WALL / FLOOR PLAN DRAWING EDITOR
+   ============================================================ */
+.modal.wd-modal{width:min(1100px, 96vw)}
+.wd-toolbar{
+  display:flex;flex-wrap:wrap;gap:12px;align-items:center;
+  margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid var(--line);
+}
+.wd-types{display:flex;gap:4px;flex-wrap:wrap}
+.wd-types button{
+  background:var(--panel-2);color:var(--text-dim);border:1px solid var(--line);
+  border-radius:5px;padding:6px 10px;font-size:12px;cursor:pointer;
+}
+.wd-types button:hover{border-color:var(--line-2)}
+.wd-types button.active{background:var(--accent);border-color:var(--accent);color:#0a1220;font-weight:600}
+.wd-actions{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-left:auto}
+.wd-actions .btn{font-size:11.5px;padding:5px 9px}
+.wd-snap{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--text-dim);cursor:pointer}
+.wd-main{display:flex;gap:14px;align-items:flex-start}
+.wd-canvas-wrap{flex:1;min-width:0;max-height:none}
+.wd-canvas-wrap .cal-canvas{width:100%;height:100%;object-fit:cover}
+.wd-overlay{position:absolute;inset:6px;width:calc(100% - 12px);height:calc(100% - 12px);cursor:crosshair;pointer-events:auto}
+.wd-overlay .wd-grid{stroke:rgba(122,160,255,.14);stroke-width:.3;vector-effect:non-scaling-stroke}
+.wd-overlay .wd-seg{stroke-width:2.5;vector-effect:non-scaling-stroke;stroke-linecap:round}
+.wd-overlay .wd-room{fill:rgba(58,167,118,.14);stroke:rgba(58,167,118,.7);stroke-width:1;vector-effect:non-scaling-stroke}
+.wd-overlay .wd-node{fill:#fff;stroke:#0a1220;stroke-width:.4;vector-effect:non-scaling-stroke}
+.wd-overlay .wd-node-start{fill:#f5d76e}
+.wd-side{width:280px;flex:none;display:flex;flex-direction:column;gap:8px}
+.wd-status{
+  font-size:11.5px;color:var(--text-dim);line-height:1.4;
+  background:rgba(90,169,255,.08);border:1px solid rgba(90,169,255,.25);
+  border-radius:5px;padding:7px 9px;
+}
+.wd-list{display:flex;flex-direction:column;gap:4px;max-height:300px;overflow:auto}
+.wd-list-hdr{font-size:10px;letter-spacing:.4px;text-transform:uppercase;color:var(--text-mute);font-weight:600;margin-top:6px}
+.wd-row{display:flex;align-items:center;gap:5px}
+.wd-row-ico{font-size:13px;color:var(--text-dim)}
+.wd-row-sw{width:12px;height:12px;border-radius:2px;flex:none;border:1px solid rgba(255,255,255,.2)}
+.wd-row-type{background:var(--panel-2);color:var(--text);border:1px solid var(--line);border-radius:4px;padding:3px 4px;font-size:11px}
+.wd-row-name,.wd-row-tag{background:var(--panel-2);color:var(--text);border:1px solid var(--line);border-radius:4px;padding:3px 5px;font-size:11px;min-width:0;flex:1}
+.wd-row-tag{flex:none;width:70px}
+.wd-row-del{background:transparent;border:none;color:var(--text-mute);cursor:pointer;font-size:14px;padding:0 4px;flex:none}
+.wd-row-del:hover{color:var(--bad)}
+.wd-empty{font-size:11.5px;color:var(--text-mute);padding:8px 0;line-height:1.4}
+.wd-legend{margin-top:auto;border-top:1px solid var(--line);padding-top:8px;display:flex;flex-direction:column;gap:3px;font-size:10.5px;color:var(--text-mute)}
+.wd-legend .wd-lg{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:middle}
+@media(max-width:820px){
+  .wd-main{flex-direction:column}
+  .wd-side{width:100%}
+}
+
 .modal.cal{width:min(720px, 95vw)}
 .cal-instructions{
   background:rgba(90,169,255,.1);border:1px solid rgba(90,169,255,.3);
@@ -488,16 +608,21 @@
 .cal-instructions b{color:var(--accent-2)}
 .cal-canvas-wrap{
   background:var(--panel-2);border:1px solid var(--line);
-  border-radius:6px;padding:6px;position:relative;
-  max-height:60vh;overflow:hidden;
+  border-radius:6px;padding:6px;position:relative;overflow:hidden;
+  /* Center the (aspect-fitted) image so the overlay can be positioned to
+     exactly match its rendered box via syncCalOverlay(). */
+  display:flex;align-items:center;justify-content:center;
 }
 .cal-canvas{
-  width:100%;display:block;border-radius:4px;
-  cursor:crosshair;
+  /* Fit within the available area instead of overflowing a clamped wrapper —
+     a tall image was overflowing while the SVG overlay stayed wrapper-sized,
+     which threw the click markers off vertically. */
+  max-width:100%;max-height:60vh;width:auto;height:auto;
+  display:block;border-radius:4px;cursor:crosshair;
 }
 .cal-svg{
-  position:absolute;inset:6px;width:calc(100% - 12px);height:calc(100% - 12px);
-  pointer-events:none;
+  /* Position/size is set inline by syncCalOverlay() to match the image. */
+  position:absolute;pointer-events:none;
 }
 .cal-svg .cal-point{fill:#f5d76e;stroke:#000;stroke-width:1}
 .cal-svg .cal-line{stroke:#f5d76e;stroke-width:2;stroke-dasharray:4 2}
@@ -684,3 +809,32 @@
   border-radius:3px;
 }
 .eb-cat-chip .eb-cat-del:hover{background:rgba(239,93,111,.18);color:var(--bad)}
+
+/* Drag-to-reorder affordances on the category chips. */
+.eb-cat-chip{cursor:grab;user-select:none}
+.eb-cat-chip:active{cursor:grabbing}
+.eb-cat-chip.dragging{opacity:.45}
+.eb-cat-chip.drop-target{box-shadow:0 0 0 2px var(--accent)}
+.eb-cat-chip .eb-cat-grip{
+  color:var(--text-mute);font-size:9px;letter-spacing:-1px;line-height:1;
+  margin-right:2px;
+}
+
+/* Sidebar group-header drag handle (only visible in category-sort mode). */
+.el-group-hdr.draggable{cursor:grab}
+.el-group-hdr.draggable:active{cursor:grabbing}
+.el-group-hdr.dragging{opacity:.55}
+.el-group-hdr.drop-target{background:rgba(90,169,255,.12);box-shadow:inset 2px 0 0 var(--accent)}
+.el-group-hdr .el-group-grip{
+  color:var(--text-mute);font-size:9px;letter-spacing:-1px;line-height:1;
+  margin-right:2px;
+}
+/* Category reorder arrows (category-sort mode) — reliable alternative to
+   drag-and-drop for swapping category order. */
+.el-group-hdr .el-cat-reorder{display:inline-flex;flex-direction:column;gap:0;margin-right:4px}
+.el-group-hdr .el-cat-move{
+  appearance:none;-webkit-appearance:none;border:none;background:transparent;cursor:pointer;
+  color:var(--text-mute);font-size:7px;line-height:1;padding:1px 3px;border-radius:2px;
+}
+.el-group-hdr .el-cat-move:hover:not(:disabled){color:var(--accent);background:rgba(90,169,255,.14)}
+.el-group-hdr .el-cat-move:disabled{opacity:.25;cursor:default}

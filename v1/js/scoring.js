@@ -16,6 +16,9 @@ function evaluate(){
   // mainDesk, corridor, …). When the user's bundle doesn't include one of
   // them, we want to degrade gracefully instead of throwing — otherwise an
   // exception here blocks the downstream render() and the UI freezes.
+  // Start from a clean flag list every run so a mid-body throw can't leave
+  // stale flags from the previous evaluation lingering in state.
+  state.flags = [];
   try { _evaluateBody(_allDefs); }
   catch(e){
     console.warn("[evaluate] scoring rule threw — partial result kept.", e);
@@ -23,6 +26,38 @@ function evaluate(){
     if(!state.metrics || typeof state.metrics !== "object") state.metrics = {};
     if(state.score == null) state.score = null;
     if(!state.gate) state.gate = "—";
+  }
+  // PPE / required-safety-practices flags run independently of the main
+  // scoring body so they always surface, even if a layout-specific rule
+  // above threw. (Deeper PPE→score weighting is wired up with analysis later.)
+  try { _appendPpeFlags(_allDefs); }
+  catch(e){ console.warn("[evaluate] PPE pass threw.", e); }
+}
+
+/* Flag higher-risk custom tools that declare no required PPE or safety
+   practices, so their safety requirements are captured and visible. */
+function _appendPpeFlags(allDefs){
+  if(!Array.isArray(state.flags)) state.flags = [];
+  const Z = state.zones || {};
+  const isIncluded = id => !Z[id] || Z[id].included !== false;
+  for(const d of allDefs){
+    if(!d || !d.custom || !d.variableAttrs) continue;   // tool-type custom elements only
+    if(!isIncluded(d.id)) continue;
+    const va = d.variableAttrs;
+    const ppe = Array.isArray(va.ppe) ? va.ppe : [];
+    const practices = (va.safetyPractices || "").trim();
+    const hiRisk = (d.risk >= 3) || (d.operationRisk >= 3);
+    if(!(hiRisk && ppe.length === 0 && !practices)) continue;
+    const key = `ppe-missing-${d.id}`;
+    if(state.flags.some(f => f.key === key)) continue;
+    const severity = (d.risk >= 4 || d.operationRisk >= 4) ? "warn" : "notice";
+    state.flags.push({
+      severity, key,
+      title: `No PPE / safety practices: ${d.label}`,
+      why: `${d.label} is higher-risk (display risk ${d.risk}, operation risk ${d.operationRisk}) but lists no required PPE or safety practices, so its safety requirements aren't captured.`,
+      fix: `Open ${d.label} in the Element Builder → Variable Attributes and specify the required PPE (e.g. eye / hearing protection) and any mandatory safety practices.`,
+      zones: [d.id],
+    });
   }
 }
 

@@ -74,17 +74,22 @@ header.app .meta b{color:var(--text-dim);font-weight:600}
    ============================================================ */
 .app-grid{
   display:grid;
-  grid-template-columns: 320px minmax(0,1fr) 340px;
+  /* Three columns: left sidebar (fixed default width), stage, right panel.
+     Per-widget resizing is handled by each card body, not a column divider. */
+  grid-template-columns: var(--left-col-w, 320px) minmax(0,1fr) 340px;
   gap:14px;
   padding:14px;
   align-items:stretch;
 }
 @media(max-width:1280px){
-  .app-grid{grid-template-columns:280px minmax(0,1fr) 300px}
+  .app-grid{grid-template-columns: var(--left-col-w, 280px) minmax(0,1fr) 300px}
 }
 @media(max-width:1080px){
   .app-grid{grid-template-columns:1fr}
 }
+/* Whole-column width resizer retired in favor of per-widget resizing.
+   The #leftColResizer div is hidden; wireLeftColResizer() is a no-op. */
+.col-resizer{display:none}
 .col{display:flex;flex-direction:column;gap:12px;min-width:0}
 .card{
   background:var(--panel);
@@ -117,6 +122,7 @@ header.app .meta b{color:var(--text-dim);font-weight:600}
    LEFT COLUMN COLLAPSE
    ============================================================ */
 .app-grid.no-sidebar{grid-template-columns: minmax(0,1fr) 340px}
+.app-grid.no-sidebar .col-resizer{display:none}
 @media(max-width:1280px){
   .app-grid.no-sidebar{grid-template-columns: minmax(0,1fr) 300px}
 }

@@ -11,7 +11,10 @@ let calState = null; // {payload, pt1, pt2, recalibrate}
 
 function openCalibrationModal(payload, recalibrate){
   calState = { payload, pt1:null, pt2:null, recalibrate: !!recalibrate };
-  document.getElementById("calImage").src = payload.dataUrl;
+  const calImg = document.getElementById("calImage");
+  // Once the image lays out we can size the SVG overlay to exactly match it.
+  calImg.onload = () => { syncCalOverlay(); drawCalOverlay(); };
+  calImg.src = payload.dataUrl;
   document.getElementById("calOverlay").innerHTML = "";
   document.getElementById("calConfirm").disabled = true;
   document.getElementById("calStatus").innerHTML = "Click <b>point 1</b> on the image.";
@@ -29,6 +32,24 @@ function closeCalibrationModal(){
   calState = null;
 }
 
+/* Size and position the SVG overlay to exactly cover the rendered image
+   (which may be aspect-fitted/letterboxed inside the wrapper). Without this,
+   the overlay used the wrapper box and click markers drifted vertically. */
+function syncCalOverlay(){
+  const img  = document.getElementById("calImage");
+  const wrap = document.getElementById("calCanvasWrap");
+  const svg  = document.getElementById("calOverlay");
+  if(!img || !wrap || !svg) return;
+  const ir = img.getBoundingClientRect();
+  const wr = wrap.getBoundingClientRect();
+  svg.style.left   = (ir.left - wr.left) + "px";
+  svg.style.top    = (ir.top  - wr.top)  + "px";
+  svg.style.width  = ir.width  + "px";
+  svg.style.height = ir.height + "px";
+  svg.style.right  = "auto";
+  svg.style.bottom = "auto";
+}
+
 function calCanvasClick(e){
   if(!calState) return;
   const img = document.getElementById("calImage");
@@ -36,6 +57,8 @@ function calCanvasClick(e){
   // Coordinates as percent of displayed image area
   const xPct = ((e.clientX - rect.left) / rect.width) * 100;
   const yPct = ((e.clientY - rect.top)  / rect.height) * 100;
+  // Ignore clicks that land outside the image (e.g. in the letterbox margin).
+  if(xPct < 0 || xPct > 100 || yPct < 0 || yPct > 100) return;
   if(!calState.pt1){
     calState.pt1 = { x:xPct, y:yPct };
     document.getElementById("calStatus").innerHTML = "Click <b>point 2</b> on the image.";
@@ -56,6 +79,7 @@ function calCanvasClick(e){
 function drawCalOverlay(){
   const svg = document.getElementById("calOverlay");
   if(!svg || !calState) return;
+  syncCalOverlay();   // keep the overlay aligned to the image before drawing
   let html = "";
   const r = 1.2; // viewBox is 100x100 % space
   if(calState.pt1){
@@ -80,6 +104,9 @@ function wireCalibrationModal(){
     if(e.target.id === "calibrationBackdrop") closeCalibrationModal();
   });
   document.getElementById("calCanvasWrap").addEventListener("click", calCanvasClick);
+  // Re-align the overlay if the window resizes while calibrating (points are
+  // stored as % of the image, so they stay valid — only the box moves).
+  window.addEventListener("resize", ()=>{ if(calState) drawCalOverlay(); });
   document.getElementById("calClear").addEventListener("click", ()=>{
     if(!calState) return;
     calState.pt1 = null; calState.pt2 = null;
@@ -177,6 +204,10 @@ function blankDraft(){
       maintenanceFrequency: "weekly",
       noiseDb: 60,
       smellFumes: 1,
+      // Required personal protective equipment (array of keys) and any
+      // free-text mandatory safety practices. Feed the safety scoring.
+      ppe: [],
+      safetyPractices: "",
     },
   };
 }
@@ -293,6 +324,8 @@ function openToolForEdit(def){
     kickbackVectors:       denormArr(_toArr(def.kickbackVector,       def.kickbackVectors)),
     materialVectors:       denormArr(_toArr(def.materialVector,       def.materialVectors)),
     variableAttrs: def.variableAttrs || blankDraft().variableAttrs,
+    dba_active:    Number.isFinite(def.dba_active)    ? def.dba_active    : null,
+    schedule_prob: Number.isFinite(def.schedule_prob) ? def.schedule_prob : null,
   }));
   document.getElementById("elementBuilderBackdrop").classList.add("open");
   showBuilderScreen("tool");
@@ -304,6 +337,12 @@ function openToolForEdit(def){
 }
 
 function openStructuralForEdit(def){
+  // Elements drawn in the wall editor are polygons — edit them there
+  // (it loads the whole floor plan, so all drawn pieces are editable).
+  if(def && def.rawDraw && typeof openWallDraw === "function"){
+    openWallDraw();
+    return;
+  }
   state.editingId = def.id;
   state.editingType = "structural";
   ebStructDraft = JSON.parse(JSON.stringify({
@@ -312,6 +351,7 @@ function openStructuralForEdit(def){
     shapes: def.shapes || [],
     countWalls: !!def.countWalls,
     doorSwing: def.doorSwing || 90,
+    stcOverride: Number.isFinite(def.stcOverride) ? def.stcOverride : null,
   }));
   document.getElementById("elementBuilderBackdrop").classList.add("open");
   showBuilderScreen("structural");
@@ -637,16 +677,48 @@ function renderCategoryPicker(){
   const hidden = document.getElementById("ebCat");
   const current = (hidden && hidden.value) || (ebDraft && ebDraft.cat) || "";
   host.innerHTML = "";
-  for(const c of cats){
+  // Chip order doubles as stage-layering order: earlier categories
+  // sit underneath, later ones on top. Drag to reorder.
+  cats.forEach((c, idx) => {
     const chip = document.createElement("span");
     chip.className = "eb-cat-chip" + (c.id === current ? " selected" : "");
-    chip.innerHTML = `<span class="eb-cat-swatch" style="background:${c.color}"></span><span class="eb-cat-name">${c.label}</span><button type="button" class="eb-cat-del" title="Remove this category">×</button>`;
+    chip.draggable = true;
+    chip.dataset.catId = c.id;
+    chip.title = `Drag to reorder — earlier = behind, later = in front (layer ${idx + 1} of ${cats.length})`;
+    chip.innerHTML = `<span class="eb-cat-grip" aria-hidden="true">⋮⋮</span><span class="eb-cat-swatch" style="background:${c.color}"></span><span class="eb-cat-name">${c.label}</span><button type="button" class="eb-cat-del" title="Remove this category">×</button>`;
     chip.addEventListener("click", (e)=>{
-      // Ignore clicks on the delete button itself.
       if(e.target.closest(".eb-cat-del")) return;
       if(hidden) hidden.value = c.id;
       if(ebDraft) ebDraft.cat = c.id;
       renderCategoryPicker();
+    });
+    chip.addEventListener("dragstart", (e) => {
+      e.dataTransfer.setData("text/cat-id", c.id);
+      e.dataTransfer.effectAllowed = "move";
+      chip.classList.add("dragging");
+    });
+    chip.addEventListener("dragend", () => chip.classList.remove("dragging"));
+    chip.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      chip.classList.add("drop-target");
+    });
+    chip.addEventListener("dragleave", () => chip.classList.remove("drop-target"));
+    chip.addEventListener("drop", (e) => {
+      e.preventDefault();
+      chip.classList.remove("drop-target");
+      const fromId = e.dataTransfer.getData("text/cat-id");
+      if(!fromId || fromId === c.id) return;
+      const arr = state.categories;
+      const fromIdx = arr.findIndex(x => x.id === fromId);
+      const toIdx   = arr.findIndex(x => x.id === c.id);
+      if(fromIdx < 0 || toIdx < 0) return;
+      const [moved] = arr.splice(fromIdx, 1);
+      arr.splice(toIdx, 0, moved);
+      renderCategoryPicker();
+      if(typeof renderElementsList === "function") renderElementsList();
+      if(typeof render === "function") render();
+      if(typeof saveAppState === "function") saveAppState();
     });
     chip.querySelector(".eb-cat-del").addEventListener("click", (e)=>{
       e.stopPropagation();
@@ -663,7 +735,7 @@ function renderCategoryPicker(){
       if(typeof saveAppState === "function") saveAppState();
     });
     host.appendChild(chip);
-  }
+  });
   // "+ Add" inline editor
   const adder = document.createElement("div");
   adder.className = "eb-cat-adder";
@@ -705,6 +777,14 @@ function loadDraftIntoForm(){
   document.getElementById("ebMaintFreq").value = ebDraft.variableAttrs.maintenanceFrequency;
   document.getElementById("ebNoise").value = ebDraft.variableAttrs.noiseDb;
   document.getElementById("ebSmell").value = ebDraft.variableAttrs.smellFumes;
+  // PPE / safety practices.
+  const _ppe = Array.isArray(ebDraft.variableAttrs.ppe) ? ebDraft.variableAttrs.ppe : [];
+  document.querySelectorAll(".eb-ppe-cb").forEach(cb => { cb.checked = _ppe.includes(cb.dataset.ppe); });
+  const _sp = document.getElementById("ebSafetyPractices");
+  if(_sp) _sp.value = ebDraft.variableAttrs.safetyPractices || "";
+  // Noise-source fields (left blank = not an emitter; sim_noise filters those out).
+  document.getElementById("ebDbaActive").value = (ebDraft.dba_active    !== undefined && ebDraft.dba_active    !== null) ? ebDraft.dba_active    : "";
+  document.getElementById("ebSchedProb").value = (ebDraft.schedule_prob !== undefined && ebDraft.schedule_prob !== null) ? ebDraft.schedule_prob : "";
   updateBuilderPreview();
   renderShapeList();
   renderRiskZoneEditor("operator");
@@ -733,6 +813,16 @@ function readFormIntoDraft(){
   ebDraft.variableAttrs.maintenanceFrequency = document.getElementById("ebMaintFreq").value;
   ebDraft.variableAttrs.noiseDb = parseFloat(document.getElementById("ebNoise").value) || 0;
   ebDraft.variableAttrs.smellFumes = parseInt(document.getElementById("ebSmell").value, 10);
+  // PPE / safety practices.
+  ebDraft.variableAttrs.ppe = Array.from(document.querySelectorAll(".eb-ppe-cb"))
+    .filter(cb => cb.checked).map(cb => cb.dataset.ppe);
+  const _spIn = document.getElementById("ebSafetyPractices");
+  ebDraft.variableAttrs.safetyPractices = _spIn ? _spIn.value.trim() : "";
+  // Noise-source fields — empty stays empty so the sim treats the tool as silent.
+  const dbaRaw  = document.getElementById("ebDbaActive").value.trim();
+  const probRaw = document.getElementById("ebSchedProb").value.trim();
+  ebDraft.dba_active    = dbaRaw  === "" ? null : parseFloat(dbaRaw);
+  ebDraft.schedule_prob = probRaw === "" ? null : Math.max(0, Math.min(1, parseFloat(probRaw)));
 }
 
 function updateBuilderPreview(){
@@ -1098,6 +1188,39 @@ function drawShapeCanvasInto(gridId, contentId, suffix){
     inner += `<line class="axis-arrow" x1="50" y1="50" x2="${x2}" y2="${y2}"/>`;
   }
   content.innerHTML = inner;
+
+  // Adjust the SVG viewBox so non-vector risk zones that reach beyond the
+  // footprint bounding box are visible instead of being clipped. Vectors
+  // are intentionally allowed to crop because they're conceptually
+  // infinite (wall-clipped at stage time).
+  let minX = 0, minY = 0, maxX = 100, maxY = 100;
+  const expand = (x, y) => {
+    if(x < minX) minX = x; if(y < minY) minY = y;
+    if(x > maxX) maxX = x; if(y > maxY) maxY = y;
+  };
+  for(const arr of [fakeDef.operatorFootprints, fakeDef.maintenanceFootprints,
+                    fakeDef.kickbackVectors,    fakeDef.materialVectors]){
+    for(const z of (arr || [])){
+      if(!z || z.type === "vector" || z.type === "none") continue;
+      if(z.type === "radius"){
+        const r = z.radius || 0;
+        expand(50 - r, 50 - r); expand(50 + r, 50 + r);
+      } else if(z.type === "shape"){
+        const ox = z.offsetX || 0, oy = z.offsetY || 0;
+        const w  = z.w || 0,       h  = z.h || 0;
+        expand(50 + ox - w/2, 50 + oy - h/2);
+        expand(50 + ox + w/2, 50 + oy + h/2);
+      }
+    }
+  }
+  const pad = Math.max(3, (maxX - minX) * 0.04);
+  const vbX = minX - pad, vbY = minY - pad;
+  const vbW = (maxX - minX) + pad * 2, vbH = (maxY - minY) + pad * 2;
+  const svgGrid    = grid.closest("svg")    || grid.parentNode;
+  const svgContent = content.closest("svg") || content.parentNode;
+  for(const svg of [svgGrid, svgContent]){
+    if(svg && svg.setAttribute) svg.setAttribute("viewBox", `${vbX.toFixed(2)} ${vbY.toFixed(2)} ${vbW.toFixed(2)} ${vbH.toFixed(2)}`);
+  }
 }
 
 /* --- Save / Update --- */
@@ -1182,6 +1305,10 @@ function buildDefFromDraft(d, id){
     kickbackVectors:       JSON.parse(JSON.stringify(d.kickbackVectors       || [])),
     materialVectors:       JSON.parse(JSON.stringify(d.materialVectors       || [])),
     variableAttrs: JSON.parse(JSON.stringify(d.variableAttrs)),
+    // Noise-source fields — kept at top level so sim_noise.js can read
+    // them directly off the def (it does def.dba_active / def.schedule_prob).
+    dba_active:    Number.isFinite(d.dba_active)    ? d.dba_active    : undefined,
+    schedule_prob: Number.isFinite(d.schedule_prob) ? d.schedule_prob : undefined,
   };
 }
 
@@ -1248,6 +1375,7 @@ function blankStructuralDraft(){
     shapes: [{ type:"rect", x:20, y:40, w:60, h:10 }],
     countWalls: false,
     doorSwing: 90,
+    stcOverride: null,
   };
 }
 
@@ -1257,6 +1385,8 @@ function loadStructuralDraftIntoForm(){
   document.getElementById("sbLabel").value = ebStructDraft.label;
   document.getElementById("sbCountWalls").value = String(ebStructDraft.countWalls);
   document.getElementById("sbDoorSwing").value = ebStructDraft.doorSwing;
+  const stcEl = document.getElementById("sbStcOverride");
+  if(stcEl) stcEl.value = Number.isFinite(ebStructDraft.stcOverride) ? ebStructDraft.stcOverride : "";
   document.getElementById("sbFloorWallToggleField").style.display =
     (ebStructDraft.subtype === "floor") ? "flex" : "none";
   document.getElementById("sbDoorSwingField").style.display =
@@ -1473,6 +1603,7 @@ function saveStructuralElement(){
     countWalls: d.countWalls,
     doorSwing: d.doorSwing,
     unionAreaPct: unionAreaPct(d.shapes),
+    stcOverride: Number.isFinite(d.stcOverride) ? d.stcOverride : undefined,
   });
 
   if(state.editingId){
@@ -1665,7 +1796,11 @@ function wireElementBuilder(){
     card.addEventListener("click", ()=>{
       const choice = card.dataset.choice;
       if(choice === "new-tool") startNewTool();
-      else if(choice === "new-structural") startNewStructural();
+      else if(choice === "new-structural"){
+        // Walls / floor / doors are now drawn in the dedicated editor.
+        if(typeof openWallDraw === "function") openWallDraw();
+        else startNewStructural();
+      }
       else if(choice === "new-amenity") startNewAmenity();
       else if(choice === "import-elements") document.getElementById("importElementsInput").click();
     });
@@ -1734,6 +1869,11 @@ function wireElementBuilder(){
   document.getElementById("sbDoorSwing").addEventListener("input", e=>{
     ebStructDraft.doorSwing = parseFloat(e.target.value) || 0;
     drawStructuralCanvas();
+  });
+  const sbStc = document.getElementById("sbStcOverride");
+  if(sbStc) sbStc.addEventListener("input", e => {
+    const raw = e.target.value.trim();
+    ebStructDraft.stcOverride = raw === "" ? null : parseFloat(raw);
   });
   document.getElementById("sbAddShape").addEventListener("click", ()=>{
     ebStructDraft.shapes.push({ type:"rect", x:40, y:40, w:20, h:20 });

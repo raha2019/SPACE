@@ -17,6 +17,51 @@ function renderRegions(){
   });
 }
 
+/* X/Y coordinate reference grid on the stage. Lines are drawn in a
+   preserveAspectRatio="none" SVG (so they map to stage %), while the
+   coordinate labels are HTML divs positioned by % so text isn't stretched.
+   Labels show real units when a scale is calibrated, otherwise percent. */
+function renderGrid(){
+  stageEl.querySelectorAll(".coord-grid,.cg-label").forEach(n=>n.remove());
+  if(!state.showGrid) return;
+  const NS = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(NS, "svg");
+  svg.setAttribute("class", "coord-grid");
+  svg.setAttribute("viewBox", "0 0 100 100");
+  svg.setAttribute("preserveAspectRatio", "none");
+  const step = 10;
+  let lines = "";
+  for(let p = 0; p <= 100; p += step){
+    const major = (p % 50 === 0);
+    const cls = major ? "cg-line cg-major" : "cg-line";
+    lines += `<line x1="${p}" y1="0" x2="${p}" y2="100" class="${cls}"/>`;
+    lines += `<line x1="0" y1="${p}" x2="100" y2="${p}" class="${cls}"/>`;
+  }
+  svg.innerHTML = lines;
+  stageEl.appendChild(svg);
+  const scaled = (typeof hasScale === "function") && hasScale();
+  const fmt = (p, axis) => scaled ? pctToUnits(p, axis).toFixed(0) : p + "%";
+  const frag = document.createDocumentFragment();
+  for(let p = step; p < 100; p += step){
+    const xl = document.createElement("div");
+    xl.className = "cg-label cg-x";
+    xl.style.left = p + "%";
+    xl.textContent = fmt(p, "x");
+    frag.appendChild(xl);
+    const yl = document.createElement("div");
+    yl.className = "cg-label cg-y";
+    yl.style.top = p + "%";
+    yl.textContent = fmt(p, "y");
+    frag.appendChild(yl);
+  }
+  // Unit marker in the corner.
+  const corner = document.createElement("div");
+  corner.className = "cg-label cg-origin";
+  corner.textContent = scaled ? (state.scale.unit) : "%";
+  frag.appendChild(corner);
+  stageEl.appendChild(frag);
+}
+
 function renderFlowLines(){
   stageEl.querySelectorAll(".flow-line,.flow-label").forEach(n=>n.remove());
   if(!state.showFlow) return;
@@ -91,6 +136,7 @@ function renderZones(){
     el.className = `zone r${def.risk} ${def.fixed?"fixed":""}`;
     if(def.elementClass === "structural"){
       el.classList.add("struct-" + (def.subtype || "wall"));
+      if(def.wallType) el.classList.add("wall-" + def.wallType);
     }
     if(def.elementClass === "amenity"){
       el.classList.add("amenity");
@@ -109,6 +155,13 @@ function renderZones(){
     el.style.top  = z.y+"%";
     el.style.width  = z.w+"%";
     el.style.height = z.h+"%";
+    // Category order drives stage layering: earlier categories sit
+    // behind, later ones in front. Zones without a category fall back
+    // to a baseline so they don't collide with intentional layering.
+    if(def.cat && Array.isArray(state.categories)){
+      const idx = state.categories.findIndex(c => c.id === def.cat);
+      if(idx >= 0) el.style.zIndex = String(10 + idx);
+    }
     if(z.rotation){
       el.style.transform = `rotate(${z.rotation}deg)`;
       el.style.transformOrigin = "center center";
@@ -181,6 +234,12 @@ function buildCompositeSVG(def){
       c.setAttribute("cx", sh.x); c.setAttribute("cy", sh.y);
       c.setAttribute("r", sh.radius);
       svg.appendChild(c);
+    } else if(sh.type === "polygon"){
+      // Free-form footprint (walls, rooms) drawn in the wall editor.
+      const poly = document.createElementNS(ns,"polygon");
+      poly.setAttribute("class","fp");
+      poly.setAttribute("points", (sh.points||[]).map(p=>`${p.x},${p.y}`).join(" "));
+      svg.appendChild(poly);
     }
   });
 
@@ -674,6 +733,7 @@ function render(partial){
     renderRegions();
     renderZones();
   }
+  renderGrid();
   renderFlowLines();
   renderVectorOverlay();
   renderHeatmap();
@@ -689,4 +749,6 @@ function render(partial){
     `${all.length} zones · ${all.filter(d=>!d.fixed).length} movable`;
   // Autosave a snapshot to localStorage (debounced inside).
   if(typeof saveAppState === "function") saveAppState();
+  // Live analysis re-run on layout change (debounced inside).
+  if(typeof triggerLiveSim === "function") triggerLiveSim();
 }

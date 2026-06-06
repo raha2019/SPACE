@@ -11,6 +11,8 @@ const state = {
   showFlow:true,
   showSidebar:true,
   showLabels:true,
+  // X/Y coordinate reference grid on the stage (Layout Builder).
+  showGrid:false,
   // Editable header metadata, persisted via autosave + export.
   projectInfo:{
     project: "Invention Studio Layout Optimization for Safety and Accessibility",
@@ -21,6 +23,17 @@ const state = {
   elementsSort: "risk",   // "risk" | "category"
   // Dismissible prototype banner — true once the user closes it.
   bannerDismissed: false,
+  // Heatmap grid resolution: "coarse" | "medium" | "fine".
+  simResolution: "medium",
+  // Width of the left sidebar column in px (user-resizable via divider).
+  leftColWidth: null,
+  // Optional numeric override (multiplier of the base grid resolution).
+  // When set, takes precedence over simResolution.
+  simResolutionFactor: null,
+  // When true, the last-run analysis is re-fired after every render()
+  // (debounced) so the heatmap stays in sync with layout edits.
+  analysisLive: false,
+  analysisLastSim: null,
   // User-editable tool groups. id is a stable slug; color is the swatch.
   categories:[
     { id:"general",   label:"General",      color:"#5aa9ff" },
@@ -54,6 +67,9 @@ const state = {
   // Heatmap overlay — null = off, else a METRIC_DEFS key.
   heatmapMetric:null,
   transformPanelPos:null,
+  // Snap-to-grid dashboard layout: { cols, items:{ widgetId:{x,y,w,h} } }
+  // in grid units. null until initDashboard() seeds it from defaults.
+  dashboard:null,
 };
 
 /* ------------------------------------------------------------------
@@ -81,6 +97,7 @@ function saveAppState(){
           showClearance: state.showClearance,
           showFlow: state.showFlow,
           showSidebar: state.showSidebar,
+          showGrid: state.showGrid,
           units: state.units,
           scale: state.scale,
           customElements: state.customElements,
@@ -93,7 +110,13 @@ function saveAppState(){
           elementsSort: state.elementsSort,
           projectInfo: state.projectInfo,
           categories: state.categories,
+          simResolution: state.simResolution,
+          simResolutionFactor: state.simResolutionFactor,
+          leftColWidth: state.leftColWidth,
+          analysisLive: state.analysisLive,
+          analysisLastSim: state.analysisLastSim,
           transformPanelPos: state.transformPanelPos,
+          dashboard: state.dashboard,
         },
       };
       localStorage.setItem(_PERSIST_KEY, JSON.stringify(snap));
@@ -137,6 +160,16 @@ function refitElementsToScale(){
   if(!hasScale()) return;
   function fit(def){
     if(!def || !Number.isFinite(def.wReal) || !Number.isFinite(def.hReal)) return;
+    const cur = currentUnit();
+    // The stored real dims were entered under def.realUnit, which may differ
+    // from the current unit (e.g. an element made in meters, then the floor
+    // plan recalibrated in feet). Convert first so the element keeps its true
+    // real-world footprint, then re-stamp the unit so it stays consistent.
+    if(def.realUnit && def.realUnit !== cur){
+      def.wReal = convertUnits(def.wReal, def.realUnit, cur);
+      def.hReal = convertUnits(def.hReal, def.realUnit, cur);
+    }
+    def.realUnit = cur;
     const newW = unitsToPct(def.wReal, "x");
     const newH = unitsToPct(def.hReal, "y");
     if(Number.isFinite(newW) && newW > 0) def.w = newW;
@@ -160,6 +193,17 @@ function refitElementsToScale(){
    Returns null when no scale is set. */
 function hasScale(){ return !!(state.scale && state.scale.pxPerUnit); }
 function currentUnit(){ return state.scale ? state.scale.unit : state.units; }
+
+/* Linear length-unit conversion. Supports the app's display units (feet /
+   meters, with a few aliases); unknown units fall through unchanged so a
+   conversion is never lossy-by-guessing. 1 ft = 0.3048 m exactly. */
+const _UNIT_TO_M = { m:1, meter:1, meters:1, ft:0.3048, foot:0.3048, feet:0.3048 };
+function convertUnits(v, from, to){
+  if(!Number.isFinite(v) || !from || !to || from === to) return v;
+  const fm = _UNIT_TO_M[from], tm = _UNIT_TO_M[to];
+  if(!fm || !tm) return v;
+  return v * fm / tm;
+}
 
 function stageDimsPx(){
   // Pixel dimensions of the floor plan image currently driving the

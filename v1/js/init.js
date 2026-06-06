@@ -12,6 +12,10 @@ function init(){
   wireElementBuilder();
   wireProjectImportWizard();
   if(typeof wireSimulations === "function") wireSimulations();
+  if(typeof wireAnalysisPanel === "function") wireAnalysisPanel();
+  if(typeof wireWallDraw === "function") wireWallDraw();
+  if(typeof wireLeftColResizer === "function") wireLeftColResizer();
+  if(typeof initDashboard === "function") initDashboard();
   applySidebarVisibility();
   if(typeof applyLabelsVisibility === "function") applyLabelsVisibility();
   // Rebuild preset tabs after restore so user-added alternatives appear.

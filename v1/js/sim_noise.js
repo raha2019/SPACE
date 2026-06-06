@@ -27,9 +27,8 @@ const OSHA_PEL_DBA = 90;
 // large indoor space with HVAC and no power tools running.
 const NOISE_AMBIENT_DBA = 40;
 
-// Grid resolution (feet). 2 ft balances spatial detail with the
-// computational cost of 500-iteration Monte Carlo on a 40x25 grid.
-const NOISE_GRID_RES_FT = 2;
+// Grid resolution (feet). Adjusted at runtime by setSimResolution().
+let NOISE_GRID_RES_FT = 2;
 
 // Number of Monte Carlo trials. At 500 iterations the mean dB
 // stabilizes to within ~0.5 dB standard error for schedule_prob >= 0.2.
@@ -69,52 +68,64 @@ function _noiseGetSources(stageW, stageH) {
   return sources;
 }
 
-function _noiseBuildWallGrid(stageW, stageH, cols, rows) {
-  const wallGrid = new Uint8Array(cols * rows);
+/* Per-cell STC grid. A cell's value is the STC of the wall/door element
+   covering it (0 if no obstacle). Walls and doors both attenuate sound;
+   doors with a stcOverride field use that value instead of the global
+   default. This lets the user mark a "noise barrier" by upping STC. */
+function _noiseBuildStcGrid(stageW, stageH, cols, rows) {
+  const stcGrid = new Float32Array(cols * rows);
   for (const el of state.structuralElements) {
     const cat = el.cat || "";
-    if (cat !== "structural-wall" && cat !== "wall") continue;
+    const isWall = (cat === "structural-wall" || cat === "wall");
+    const isDoor = (cat === "structural-door" || cat === "door");
+    if (!isWall && !isDoor) continue;
     const z = state.zones[el.id];
     if (!z || !z.included) continue;
+    const stc = Number.isFinite(el.stcOverride) ? el.stcOverride : NOISE_WALL_STC;
+    if (stc <= 0) continue;
     const c1 = Math.floor((z.x / 100) * stageW / NOISE_GRID_RES_FT);
     const r1 = Math.floor((z.y / 100) * stageH / NOISE_GRID_RES_FT);
     const c2 = Math.ceil(((z.x + z.w) / 100) * stageW / NOISE_GRID_RES_FT);
     const r2 = Math.ceil(((z.y + z.h) / 100) * stageH / NOISE_GRID_RES_FT);
     for (let r = Math.max(0, r1); r < Math.min(rows, r2); r++) {
       for (let c = Math.max(0, c1); c < Math.min(cols, c2); c++) {
-        wallGrid[r * cols + c] = 1;
+        // Use the strongest STC if cells overlap (e.g. a wall passing
+        // through a door frame — pick whichever blocks more sound).
+        const i = r * cols + c;
+        if (stc > stcGrid[i]) stcGrid[i] = stc;
       }
     }
   }
-  return wallGrid;
+  return stcGrid;
 }
 
-// Count wall crossings on the straight-line path from (c1,r1) to (c2,r2)
-// using Bresenham's line algorithm. Each crossing adds NOISE_WALL_STC * 0.5 dB
-// of attenuation. Wall detection is approximate for non-axis-aligned paths.
-function _noiseWallCrossings(wallGrid, cols, rows, c1, r1, c2, r2) {
+// Walk the Bresenham line from (c1,r1) to (c2,r2) and SUM the STC value
+// of every wall/door cell along the way. Cells with stcGrid[i] === 0 are
+// free space. The returned value is fed into the inverse-square calc as
+// totalStc * 0.5 dB of insertion loss.
+function _noiseWallCrossings(stcGrid, cols, rows, c1, r1, c2, r2) {
   let x = c1, y = r1;
   const dx = Math.abs(c2 - c1), dy = Math.abs(r2 - r1);
   const sx = c1 < c2 ? 1 : -1, sy = r1 < r2 ? 1 : -1;
   let err = dx - dy;
-  let crossings = 0;
+  let totalStc = 0;
   while (true) {
     if ((x !== c1 || y !== r1) && (x !== c2 || y !== r2)) {
       const i = y * cols + x;
-      if (i >= 0 && i < wallGrid.length && wallGrid[i]) crossings++;
+      if (i >= 0 && i < stcGrid.length) totalStc += stcGrid[i];
     }
     if (x === c2 && y === r2) break;
     const e2 = 2 * err;
     if (e2 > -dy) { err -= dy; x += sx; }
     if (e2 <  dx) { err += dx; y += sy; }
   }
-  return crossings;
+  return totalStc;
 }
 
 // Precompute received dB at each grid cell for each source (walls
 // fixed between iterations). This separates the deterministic geometry
 // from the stochastic scheduling, so the Monte Carlo loop is cheap.
-function _noisePrecompute(sources, wallGrid, cols, rows, stageW, stageH) {
+function _noisePrecompute(sources, stcGrid, cols, rows, stageW, stageH) {
   return sources.map(src => {
     const srcC = Math.round(src.cx / NOISE_GRID_RES_FT);
     const srcR = Math.round(src.cy / NOISE_GRID_RES_FT);
@@ -125,9 +136,11 @@ function _noisePrecompute(sources, wallGrid, cols, rows, stageW, stageH) {
           NOISE_MIN_DIST_FT,
           Math.hypot(c - srcC, r - srcR) * NOISE_GRID_RES_FT
         );
-        const directDb   = src.dba - 20 * Math.log10(distFt);
-        const crossings  = _noiseWallCrossings(wallGrid, cols, rows, srcC, srcR, c, r);
-        cell[r * cols + c] = directDb - crossings * NOISE_WALL_STC * 0.5;
+        const directDb = src.dba - 20 * Math.log10(distFt);
+        // Sum of STC values for every wall/door cell crossed. Per-element
+        // stcOverride lets the user customize attenuation per barrier.
+        const stcSum = _noiseWallCrossings(stcGrid, cols, rows, srcC, srcR, c, r);
+        cell[r * cols + c] = directDb - stcSum * 0.5;
       }
     }
     return cell;
@@ -173,8 +186,8 @@ function runNoiseCheck() {
     return;
   }
 
-  const wallGrid    = _noiseBuildWallGrid(stageW, stageH, cols, rows);
-  const precomputed = _noisePrecompute(sources, wallGrid, cols, rows, stageW, stageH);
+  const stcGrid     = _noiseBuildStcGrid(stageW, stageH, cols, rows);
+  const precomputed = _noisePrecompute(sources, stcGrid, cols, rows, stageW, stageH);
 
   // Accumulate linear pressure squared over all MC iterations.
   const accumulator = new Float64Array(cols * rows);

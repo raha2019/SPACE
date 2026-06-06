@@ -4,11 +4,12 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>SPACE — Makerspace Layout &amp; Simulator</title>
-<link rel="stylesheet" href="css/theme.css">
-<link rel="stylesheet" href="css/layout.css">
-<link rel="stylesheet" href="css/components.css">
-<link rel="stylesheet" href="css/stage.css">
-<link rel="stylesheet" href="css/sim.css">
+<link rel="stylesheet" href="css/theme.css?v=4">
+<link rel="stylesheet" href="css/layout.css?v=4">
+<link rel="stylesheet" href="css/components.css?v=4">
+<link rel="stylesheet" href="css/stage.css?v=4">
+<link rel="stylesheet" href="css/sim.css?v=4">
+<link rel="stylesheet" href="css/dashboard.css?v=4">
 </head>
 <body>
 
@@ -39,15 +40,6 @@
   <button class="btn ghost" id="addAltBtn" title="Add a new alternative layout (a copy of the current one).">+ Add Alt</button>
   <button class="btn ghost" id="removeAltBtn" title="Remove the currently selected alternative (Current Layout cannot be removed).">× Remove Alt</button>
 
-  <div class="ctrl">
-    <label for="trafficMode">Traffic Mode</label>
-    <select id="trafficMode">
-      <option value="summer">Summer</option>
-      <option value="normal" selected>Normal Semester</option>
-      <option value="peak">Peak Semester</option>
-    </select>
-  </div>
-
   <div class="ctrl" title="Expands effective footprint of assembly tables and work zones to simulate chairs, users, carts, bins, and project materials.">
     <span>Active Use Mode</span>
     <div class="switch" id="activeUse"></div>
@@ -73,8 +65,12 @@
     <div class="switch on" id="showLabels"></div>
   </div>
 
+  <div class="ctrl" title="Overlay an X/Y coordinate grid on the Layout Builder for easier placement.">
+    <span>Show Grid</span>
+    <div class="switch" id="showGrid"></div>
+  </div>
+
   <div class="spacer"></div>
-  <button class="btn ghost" id="analysisBtn" title="Open analysis tools (coming soon).">Analysis</button>
   <input type="file" id="importImageInput" accept="image/png,image/jpeg,image/jpg,image/svg+xml,image/webp,image/gif,.png,.jpg,.jpeg,.svg,.webp,.gif,.dxf,.dwg" style="display:none" />
   <button class="btn primary" id="importProjectBtn" title="Wizard: pick a floor plan + calibrate scale, then pick a project JSON (elements + positions) — one-click setup.">Import Project</button>
   <button class="btn ghost" id="importImageBtn" title="Replace the layout background image. Accepts PNG, JPG, SVG, WEBP, GIF (DXF/DWG require external conversion).">Import Floor Plan</button>
@@ -82,6 +78,7 @@
   <button class="btn ghost" id="importConfigBtn" title="Load a project or configuration JSON. Project files include elements + positions in one file; configuration files include positions only.">Import Configuration</button>
   <button class="btn ghost" id="elementBuilderBtn" title="Create custom elements with name, risk level, and default size.">Element Builder</button>
   <button class="btn ghost" id="resetBtn">Reset Layout</button>
+  <button class="btn ghost" id="resetDashboardBtn" title="Reset all widget positions and sizes to the default dashboard arrangement.">Reset Widgets</button>
   <button class="btn primary" id="exportBtn">Export Project</button>
 </div>
 
@@ -118,10 +115,12 @@
   </div>
 </div>
 
-<div class="app-grid" id="appGrid">
-  <!-- ============== LEFT PANEL ============== -->
-  <div class="col col-left">
-    <div class="card" style="flex:1;display:flex;flex-direction:column;min-height:0">
+<!-- Snap-to-grid dashboard. Every .card carries data-widget (its layout key
+     in state.dashboard) and data-dgroup (default left/mid/right group, used
+     by the Show Sidebar toggle). Positions are written as inline grid-column
+     / grid-row by js/dashboard.js. -->
+<div class="dashboard" id="appGrid">
+    <div class="card" id="elementsCard" data-widget="elements" data-dgroup="left">
       <h3>
         Elements <span class="pill" id="elementCountPill">0</span>
         <select id="elementsSort" class="el-sort" title="Group the elements sidebar by…" style="margin-left:auto;background:var(--panel-2);color:var(--text-dim);border:1px solid var(--line);border-radius:4px;padding:2px 6px;font-size:10.5px;text-transform:none;letter-spacing:0;font-weight:500">
@@ -129,12 +128,12 @@
           <option value="category">By category</option>
         </select>
       </h3>
-      <div class="body" style="flex:1;display:flex;flex-direction:column;min-height:0">
+      <div class="body" id="elementsBody">
         <div class="elements-list" id="elementsList"></div>
       </div>
     </div>
 
-    <div class="card">
+    <div class="card" data-widget="risk" data-dgroup="left">
       <h3>Risk Summary <span class="pill" id="presetPill">Current</span></h3>
       <div class="body">
         <div class="score-row">
@@ -150,33 +149,85 @@
       </div>
     </div>
 
-    <div class="card">
+    <div class="card" data-widget="metrics" data-dgroup="left">
       <h3>Weighted Metrics</h3>
       <div class="body" id="metricsBody"></div>
     </div>
 
-    <div class="card" style="flex:1;display:flex;flex-direction:column;min-height:0">
+    <div class="card" data-widget="flags" data-dgroup="left">
       <h3>Flags &amp; Warnings <span class="pill" id="flagCountPill">0</span></h3>
-      <div class="body" style="flex:1;display:flex;flex-direction:column;min-height:0">
+      <div class="body">
         <div class="warn-list" id="warnList"></div>
       </div>
     </div>
 
-    <!-- Simulation results: populated by Analysis &rarr; ADA / Egress / Noise / Run All.
-         Hidden until a sim has run. Cleared by the Clear button in the Analysis menu. -->
-    <div class="card" id="simResultsCard" style="display:none">
+    <!-- ============== ANALYSIS SIDEBAR WIDGET ==============
+         Always-visible controls (run buttons + toggles) wired by
+         wireAnalysisPanel() in controls.js. Replaces the old toolbar
+         Analysis button + popup modal. -->
+    <div class="card" id="analysisCard" data-widget="analysis" data-dgroup="right">
+      <h3>Analysis <span class="pill" id="analysisActivePill">Idle</span></h3>
+      <div class="body">
+        <div class="an-section">
+          <div class="an-label">Run simulation</div>
+          <div class="an-btn-grid">
+            <button class="btn ghost an-run" id="simAdaBtn"    title="Corridor width + door clearance vs ADA Standards (2010). Heatmap shows fail / marginal / OK.">♿ ADA</button>
+            <button class="btn ghost an-run" id="simEgressBtn" title="Travel distance to nearest exit, occupant load + exit capacity (NFPA 101), dead-ends.">🚪 Egress</button>
+            <button class="btn ghost an-run" id="simNoiseBtn"  title="Monte-Carlo inverse-square noise map. Sources need dba_active + schedule_prob. OSHA bands.">🔊 Noise</button>
+            <button class="btn ghost an-run an-run-all" id="simAllBtn" title="Run ADA, Egress, and Noise together; all heatmaps render at once.">⚡ Run All</button>
+          </div>
+          <button class="btn ghost an-clear" id="simClearBtn" disabled title="Clear all heatmap overlays and the results below.">Clear overlays</button>
+        </div>
+
+        <div class="an-section">
+          <div class="an-label">Options</div>
+          <div class="ctrl an-toggle" title="Re-run the last analysis automatically after every layout change.">
+            <span>Live mode</span>
+            <div class="switch" id="analysisLiveSwitch"></div>
+          </div>
+          <label class="an-field">
+            <span>Traffic mode</span>
+            <select id="analysisTrafficMode">
+              <option value="summer">Summer</option>
+              <option value="normal">Normal Semester</option>
+              <option value="peak">Peak Semester</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="an-section">
+          <div class="an-label">Heatmap resolution</div>
+          <div class="an-radios">
+            <label><input type="radio" name="simRes" value="coarse" />Coarse</label>
+            <label><input type="radio" name="simRes" value="medium" />Medium</label>
+            <label><input type="radio" name="simRes" value="fine" />Fine</label>
+          </div>
+          <div class="an-slider-row">
+            <span>finer</span>
+            <input type="range" id="simResSlider" min="0.05" max="6" step="0.05" value="1" />
+            <span>coarser</span>
+          </div>
+          <div class="an-readout" id="simResReadout"></div>
+        </div>
+
+        <div class="an-note">All three simulations require a calibrated floor-plan scale (Import Project → calibrate, or Import Floor Plan and click two points).</div>
+      </div>
+    </div>
+
+    <!-- Simulation results: populated by the Analysis widget (ADA / Egress /
+         Noise / Run All). Hidden until a sim has run; cleared by "Clear
+         overlays" in the Analysis widget. -->
+    <div class="card" id="simResultsCard" data-widget="simResults" data-dgroup="right" style="display:none">
       <h3>Simulation Results</h3>
       <div class="body" id="simResults"></div>
     </div>
-    <div class="card" id="simPenaltyCard" style="display:none">
+    <div class="card" id="simPenaltyCard" data-widget="simPenalty" data-dgroup="right" style="display:none">
       <h3>Simulation Penalty Adjustment</h3>
       <div class="body" id="simPenaltyBody"></div>
     </div>
-  </div>
 
-  <!-- ============== MIDDLE PANEL ============== -->
-  <div class="col">
-    <div class="card stage-card" style="flex:1">
+  <!-- ============== STAGE ============== -->
+    <div class="card stage-card" data-widget="stage" data-dgroup="mid">
       <h3>
         Layout Builder
         <span class="calib-badge" id="calibBadge">Drag-to-calibrate</span>
@@ -249,11 +300,9 @@
         </div>
       </div>
     </div>
-  </div>
 
-  <!-- ============== RIGHT PANEL ============== -->
-  <div class="col">
-    <div class="card">
+  <!-- ============== RIGHT GROUP ============== -->
+    <div class="card" data-widget="conclusion" data-dgroup="right">
       <h3>Conclusion</h3>
       <div class="body">
         <div class="concl-row">
@@ -271,7 +320,7 @@
       </div>
     </div>
 
-    <div class="card">
+    <div class="card" data-widget="topIssues" data-dgroup="right">
       <h3>Top Issues</h3>
       <div class="body">
         <div class="concl-section">
@@ -284,22 +333,6 @@
         </div>
       </div>
     </div>
-
-    <div class="card">
-      <h3>Mentor Note</h3>
-      <div class="body">
-        <div class="concl-section note">
-          <p>
-            Scoring weights and warning thresholds are <b>preliminary</b> and intended for adjustment based on staff/PI feedback, Matterport measurements, SUMS, 3DPrinterOS, and future observation data.
-          </p>
-        </div>
-        <div class="concl-section" style="margin-top:8px">
-          <h4>Method</h4>
-          <p>Two-step evaluation: <b>(1)</b> feasibility checks for overlap, egress, and corridor blockage; <b>(2)</b> weighted scoring across seven layout-quality metrics, modulated by traffic and active-use mode.</p>
-        </div>
-      </div>
-    </div>
-  </div>
 </div>
 
 <!-- ============================================================
@@ -324,8 +357,8 @@
         </div>
         <div class="chooser-card" data-choice="new-structural">
           <div class="cc-icon">▥</div>
-          <div class="cc-title">Walls / Floor Space / Doors</div>
-          <div class="cc-desc">Architectural geometry. Defines usable floor area, blocks paths, affects clearance calculations.</div>
+          <div class="cc-title">Draw Walls / Floor / Doors</div>
+          <div class="cc-desc">Open the drawing editor: click to draw walls over the floor plan; a closed contour becomes a floor space. Set each line as a normal/sound/false wall, construction-line divider, or door.</div>
         </div>
         <div class="chooser-card" data-choice="new-amenity">
           <div class="cc-icon">⛑</div>
@@ -617,6 +650,42 @@
             <div class="va-help">Drives ventilation and isolation requirements.</div>
           </div>
         </div>
+
+        <div style="margin-top:14px;padding-top:10px;border-top:1px solid var(--line)">
+          <div style="font-size:11px;letter-spacing:.4px;text-transform:uppercase;color:var(--text-mute);font-weight:600;margin-bottom:8px">Required PPE / Safety Practices</div>
+          <p class="help-text" style="margin-top:0">Personal protective equipment and mandatory practices for using this element. Feeds the safety scoring — higher-risk elements with nothing specified are flagged.</p>
+          <div class="ppe-grid" id="ebPpeGrid">
+            <label class="ppe-chip"><input type="checkbox" class="eb-ppe-cb" data-ppe="eye"><span>👓 Eye protection</span></label>
+            <label class="ppe-chip"><input type="checkbox" class="eb-ppe-cb" data-ppe="hearing"><span>🎧 Hearing protection</span></label>
+            <label class="ppe-chip"><input type="checkbox" class="eb-ppe-cb" data-ppe="gloves"><span>🧤 Gloves</span></label>
+            <label class="ppe-chip"><input type="checkbox" class="eb-ppe-cb" data-ppe="respirator"><span>😷 Respirator / dust mask</span></label>
+            <label class="ppe-chip"><input type="checkbox" class="eb-ppe-cb" data-ppe="faceshield"><span>🛡 Face shield</span></label>
+            <label class="ppe-chip"><input type="checkbox" class="eb-ppe-cb" data-ppe="closedtoe"><span>🥾 Closed-toe shoes</span></label>
+            <label class="ppe-chip"><input type="checkbox" class="eb-ppe-cb" data-ppe="apron"><span>🦺 Apron / lab coat</span></label>
+            <label class="ppe-chip"><input type="checkbox" class="eb-ppe-cb" data-ppe="noLoose"><span>🚫 No loose clothing/hair</span></label>
+            <label class="ppe-chip"><input type="checkbox" class="eb-ppe-cb" data-ppe="training"><span>🎓 Training / certification</span></label>
+          </div>
+          <div class="form-field full" style="margin-top:8px">
+            <label for="ebSafetyPractices">Other required safety practices (optional)</label>
+            <textarea id="ebSafetyPractices" rows="2" maxlength="400" placeholder="e.g. buddy system required, machine guard must be in place, no work without staff present" style="background:var(--panel-2);color:var(--text);border:1px solid var(--line);border-radius:5px;padding:6px 8px;font-size:12.5px;font-family:inherit;resize:vertical;min-height:38px"></textarea>
+          </div>
+        </div>
+
+        <div style="margin-top:14px;padding-top:10px;border-top:1px solid var(--line)">
+          <div style="font-size:11px;letter-spacing:.4px;text-transform:uppercase;color:var(--text-mute);font-weight:600;margin-bottom:8px">Noise Source (for the Noise simulation)</div>
+          <div class="var-attrs">
+            <div class="va-field">
+              <label for="ebDbaActive">Operating dBA at 1 m</label>
+              <input type="number" id="ebDbaActive" min="0" max="140" step="1" placeholder="(leave blank = not a source)" />
+              <div class="va-help">Sound pressure when the tool is running. Zero/blank means the tool is silent and won't show up in the noise map.</div>
+            </div>
+            <div class="va-field">
+              <label for="ebSchedProb">Schedule probability (0–1)</label>
+              <input type="number" id="ebSchedProb" min="0" max="1" step="0.05" placeholder="e.g. 0.5" />
+              <div class="va-help">Fraction of time the source is active during the observation window. Used by the Monte Carlo noise simulator.</div>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- TAB 5: EXPORT — download just this element as a tiny
@@ -668,6 +737,11 @@
           <div class="form-field" id="sbDoorSwingField" style="display:none">
             <label for="sbDoorSwing">Door swing direction (deg)</label>
             <input type="number" id="sbDoorSwing" min="-180" max="180" step="15" value="90" />
+          </div>
+          <div class="form-field">
+            <label for="sbStcOverride">Sound transmission (STC, optional)</label>
+            <input type="number" id="sbStcOverride" min="0" max="80" step="1" placeholder="default 35" />
+            <div class="help-text">Insertion loss the noise simulator applies per crossing of this wall/door. Leave blank to use the global default (35).</div>
           </div>
         </div>
 
@@ -814,18 +888,77 @@
 
 
 
-<script src="js/data.js"></script>
-<script src="js/state.js"></script>
-<script src="js/scoring.js"></script>
-<script src="js/render.js"></script>
-<script src="js/modals.js"></script>
-<script src="js/controls.js"></script>
+<!-- ============================================================
+     WALL / FLOOR PLAN DRAWING EDITOR
+     Draw walls (polylines) over the floor plan; a closed contour
+     becomes a floor space. Wired by wireWallDraw() in walldraw.js.
+     ============================================================ -->
+<div class="modal-backdrop" id="wallDrawBackdrop">
+  <div class="modal wd-modal" role="dialog" aria-labelledby="wdTitle">
+    <div class="modal-hdr">
+      <h2 id="wdTitle">Draw Walls &amp; Floor Plan</h2>
+      <span class="mh-sub">Click to place wall points · click the first point (or “Close room”) to enclose a floor space</span>
+      <button class="mh-close" id="wdClose" title="Close">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="wd-toolbar">
+        <div class="wd-types" id="wdTypes">
+          <button type="button" data-wtype="wall" class="active">Wall</button>
+          <button type="button" data-wtype="sound">Sound wall</button>
+          <button type="button" data-wtype="false">False wall</button>
+          <button type="button" data-wtype="construction">Construction line</button>
+          <button type="button" data-wtype="door">Door</button>
+        </div>
+        <div class="wd-actions">
+          <button type="button" class="btn ghost" id="wdCloseRoom" title="Close the current chain into a floor space">⬡ Close room</button>
+          <button type="button" class="btn ghost" id="wdNewChain" title="Start a new, disconnected wall chain">↳ New chain</button>
+          <button type="button" class="btn ghost" id="wdUndo" title="Undo the last point">↶ Undo</button>
+          <button type="button" class="btn ghost" id="wdClear" title="Clear everything">Clear all</button>
+          <label class="wd-snap" title="Snap points to a grid"><input type="checkbox" id="wdSnap" checked> Snap</label>
+        </div>
+      </div>
+      <div class="wd-main">
+        <div class="cal-canvas-wrap wd-canvas-wrap" id="wdCanvasWrap">
+          <img id="wdImage" class="cal-canvas" alt="Floor plan" />
+          <svg id="wdOverlay" class="cal-svg wd-overlay" viewBox="0 0 100 100" preserveAspectRatio="none"></svg>
+        </div>
+        <div class="wd-side">
+          <div class="wd-status" id="wdStatus">Click on the plan to place the first wall point.</div>
+          <div class="wd-list" id="wdList"></div>
+          <div class="wd-legend">
+            <div><span class="wd-lg" style="background:#dde1eb"></span>Wall · blocks</div>
+            <div><span class="wd-lg" style="background:#6db1ff"></span>Sound wall · blocks, high STC</div>
+            <div><span class="wd-lg" style="background:#e8a83b"></span>False wall · blocks, removable</div>
+            <div><span class="wd-lg" style="background:#9aa0b5"></span>Construction line · non-blocking divider</div>
+            <div><span class="wd-lg" style="background:#d8aa5a"></span>Door · passable</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-ftr">
+      <button class="btn ghost" id="wdCancel">Cancel</button>
+      <button class="btn primary" id="wdSave">Save Floor Plan</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/data.js?v=4"></script>
+<script src="js/state.js?v=4"></script>
+<script src="js/scoring.js?v=4"></script>
+<script src="js/render.js?v=4"></script>
+<script src="js/modals.js?v=4"></script>
+<script src="js/controls.js?v=4"></script>
 <!-- Simulation modules (ADA, Egress, Noise) and their shared UI bridge.
      Modules load before init.js so wireSimulations() can run at boot. -->
-<script src="js/sim_ada.js"></script>
-<script src="js/sim_egress.js"></script>
-<script src="js/sim_noise.js"></script>
-<script src="js/sim_ui.js"></script>
-<script src="js/init.js"></script>
+<script src="js/sim_ada.js?v=4"></script>
+<script src="js/sim_egress.js?v=4"></script>
+<script src="js/sim_noise.js?v=4"></script>
+<script src="js/sim_ui.js?v=4"></script>
+<!-- Snap-to-grid dashboard: must load before init.js so initDashboard()
+     can place the widgets at boot. -->
+<script src="js/dashboard.js?v=4"></script>
+<!-- Wall / floor-plan drawing editor (replaces the shape-based structural builder). -->
+<script src="js/walldraw.js?v=4"></script>
+<script src="js/init.js?v=4"></script>
 </body>
 </html>

@@ -37,10 +37,9 @@ const ADA_MIN_CORRIDOR_WIDTH_IN = 36;
 // circulation paths in facilities with equipment carts and mobility aids.
 const ADA_MIN_PRIMARY_CORRIDOR_IN = 44;
 
-// Grid resolution for the occupancy grid (feet).
-// 0.5 ft = 6 inches: fine enough to distinguish the 32-in vs 36-in
-// thresholds without excessive memory on a typical 80 x 50 ft space.
-const ADA_GRID_RES_FT = 0.5;
+// Grid resolution for the occupancy grid (feet). Adjusted at runtime by
+// setSimResolution() — coarser values run faster but lose precision.
+let ADA_GRID_RES_FT = 0.5;
 
 // Zone IDs that are always traversable even if their category would
 // otherwise mark them as obstacles (dedicated circulation areas).
@@ -51,6 +50,13 @@ const ADA_PASSABLE_IDS = new Set([
 function _adaIsBlocking(def) {
   if (!def) return false;
   if (ADA_PASSABLE_IDS.has(def.id)) return false;
+  // Explicit per-element flag set by the wall-draw editor wins: walls block,
+  // construction-line dividers / doors / floors do not.
+  if (typeof def.blocksMovement === "boolean") return def.blocksMovement;
+  // Structural FLOOR elements are non-physical area labels (a bordered
+  // region with a name), not solid objects. They never block circulation,
+  // so the distance transform must treat them as open space.
+  if (def.elementClass === "structural" && def.subtype === "floor") return false;
   const cat = def.cat || "";
   // Structural doors, floor areas, and exit zones are openings.
   if (cat === "exit" || cat === "structural-floor" || cat === "structural-door") return false;
