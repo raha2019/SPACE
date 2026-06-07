@@ -41,6 +41,13 @@ function wireControls(){
     evaluate(); render();
   });
 
+  // Optimize Layout — auto-arrange placeholder (algorithm planned; see IDEAS.md D-OPT).
+  const _optBtn = document.getElementById("optimizeLayoutBtn");
+  if(_optBtn) _optBtn.addEventListener("click", ()=>{
+    if(typeof optimizeLayout === "function"){ optimizeLayout(); return; }
+    alert("Optimize Layout — coming soon.\n\nThis will auto-arrange the included, non-fixed elements inside a selected room to maximize the weighted safety/quality score (respecting walls, doors, clearances, and your metric weights). The algorithm design is documented in IDEAS.md (D-OPT).");
+  });
+
   // Export
   document.getElementById("exportBtn").addEventListener("click", exportProject);
 
@@ -196,6 +203,7 @@ function wireAnalysisPanel(){
   const bind = (id, fn) => { const el = document.getElementById(id); if(el) el.addEventListener("click", fn); };
   bind("simAdaBtn",    () => runSim("ada"));
   bind("simEgressBtn", () => runSim("egress"));
+  bind("simFireBtn",   () => runSim("fire"));
   bind("simNoiseBtn",  () => runSim("noise"));
   bind("simAllBtn",    () => runSim("all"));
   bind("simClearBtn",  () => {
@@ -398,6 +406,7 @@ function exportProject(){
     projectInfo: state.projectInfo ? { ...state.projectInfo } : undefined,
     elementDefs,
     categories: (state.categories && state.categories.length) ? state.categories : undefined,
+    metricWeights: state.metricWeights || undefined,
     // Live state.zones for backward-compat (positions of the currently
     // active preset). Tools that only know the old shape still work.
     zones,
@@ -544,6 +553,11 @@ function applyConfig(cfg){
   }
   state.config = { ...cfg };
 
+  // 2.5 User preference weighting for the weighted-metrics score.
+  if(cfg.metricWeights && typeof cfg.metricWeights === "object"){
+    state.metricWeights = { ...cfg.metricWeights };
+  }
+
   // 3. Zone positions (optional). Updates existing zones; skips ids not present.
   if(cfg.zones && typeof cfg.zones === "object"){
     let applied = 0, missing = [];
@@ -607,13 +621,14 @@ function applyElementsBundle(bundle){
     if(!raw || !raw.id){ skipped++; continue; }
     if(existingIds.has(raw.id)){ skipped++; continue; }
 
-    // Mark as a custom element so it shows up in the Edit-Existing list
-    // and is editable through the Element Builder. Leave elementClass
-    // undefined (it's only "structural"/"amenity" for those specific kinds);
-    // sidebar grouping relies on a falsy elementClass for tool-like rows.
+    // Route each def to its proper collection so it behaves correctly
+    // (structural → wall editor + structural rendering, amenity → amenity
+    // marker + amenity editor, everything else → editable tool). Dumping
+    // all of them into customElements made walls/amenities edit as tools.
     const def = { ...raw, custom: true };
-    if(raw.elementClass) def.elementClass = raw.elementClass;
-    state.customElements.push(def);
+    if(raw.elementClass === "structural")      state.structuralElements.push(def);
+    else if(raw.elementClass === "amenity")    state.amenityElements.push(def);
+    else                                       state.customElements.push(def);
     existingIds.add(def.id);
 
     // Default placement: top-left corner. User imports a configuration
@@ -728,12 +743,20 @@ function applyProject(project){
     ? project.activePreset
     : (Object.keys(PRESETS)[0] || "current");
   if(PRESETS[preferred]){
+    // Clear the placeholder zones (elements were added at 0,0) so loadPreset's
+    // "snapshot the outgoing preset" step doesn't copy those 0,0 placeholders
+    // over the freshly-imported preset positions before re-reading them.
+    state.zones = {};
     loadPreset(preferred);
   } else if(project.zones){
     // Legacy single-preset payload: apply zones onto whatever's there.
     applyConfig({ zones: project.zones });
   }
   if(typeof rebuildTabs === "function") rebuildTabs();
+  // Re-render with the final positions (loadPreset ran after applyConfig's render).
+  if(typeof refreshStatusBars === "function") refreshStatusBars();
+  evaluate();
+  render();
 }
 
 function importConfigFromFile(file){
@@ -862,7 +885,9 @@ function wireProjectImportWizard(){
 function wireConfigImport(){
   const btn = document.getElementById("importConfigBtn");
   const input = document.getElementById("importConfigInput");
-  btn.addEventListener("click", () => input.click());
+  // The standalone button was removed (config import lives in the Import
+  // Project wizard); the hidden input is still used by the wizard.
+  if(btn) btn.addEventListener("click", () => input.click());
   input.addEventListener("change", (e) => {
     const f = e.target.files[0];
     if(f) importConfigFromFile(f);
@@ -1305,7 +1330,7 @@ function refreshTransformPanel(){
   // but cannot be moved/rotated until unlocked. (Size is no longer
   // editable here; use "Edit element settings" instead.)
   const locked = !!z.locked;
-  for(const id of ["tpX","tpY","tpRotRange","tpRotNum","tpResetRot"]){
+  for(const id of ["tpX","tpY","tpW","tpH","tpRotRange","tpRotNum","tpResetRot"]){
     const el = document.getElementById(id);
     if(el) el.disabled = locked;
   }
@@ -1329,10 +1354,16 @@ function updateTransformPanelInputs(){
   const yDisp = hasScale() ? +pctToUnits(z.y,'y').toFixed(2) : +z.y.toFixed(2);
   set("tpX", xDisp);
   set("tpY", yDisp);
+  const wDisp = hasScale() ? +pctToUnits(z.w,'x').toFixed(2) : +z.w.toFixed(2);
+  const hDisp = hasScale() ? +pctToUnits(z.h,'y').toFixed(2) : +z.h.toFixed(2);
+  set("tpW", wDisp);
+  set("tpH", hDisp);
   // Update section labels to reflect the active unit.
   const u = hasScale() ? state.scale.unit : "% of stage";
   const pLbl = document.getElementById("tpPosLbl");
   if(pLbl) pLbl.textContent = `Position (${u})`;
+  const sLbl = document.getElementById("tpSizeLbl");
+  if(sLbl) sLbl.textContent = `Size (${u})`;
   const rot = +(z.rotation || 0).toFixed(0);
   set("tpRotRange", rot);
   set("tpRotNum", rot);
@@ -1346,6 +1377,8 @@ function applyTransformInput(field, raw){
   if(!Number.isFinite(v)) return;
   if(field === "rotation"){
     z.rotation = v;
+    // Re-clamp position so the newly-rotated footprint stays on-stage.
+    const p = clampZonePos(z, z.x, z.y); z.x = p.x; z.y = p.y;
   } else {
     // If a scale is calibrated, inputs are in real units; convert
     // back to internal percent storage.
@@ -1356,11 +1389,12 @@ function applyTransformInput(field, raw){
     } else {
       pct = v;
     }
-    if(field === "x") z.x = clamp(pct, 0, 100 - z.w);
-    if(field === "y") z.y = clamp(pct, 0, 100 - z.h);
-    // w / h are no longer editable from the transform panel — bounding
-    // dimensions live on the element definition and update only when the
-    // user opens "Edit element settings" and changes the footprint.
+    if(field === "x") z.x = pct;
+    if(field === "y") z.y = pct;
+    if(field === "w") z.w = clamp(pct, 0.5, 100);
+    if(field === "h") z.h = clamp(pct, 0.5, 100);
+    // Clamp the (possibly resized) zone against its rotated footprint.
+    const p = clampZonePos(z, z.x, z.y); z.x = p.x; z.y = p.y;
   }
   evaluate();
   render();
@@ -1388,6 +1422,8 @@ function wireTransformPanel(){
   document.getElementById("tpLock").addEventListener("click", toggleSelectedLock);
   document.getElementById("tpX").addEventListener("input", e => applyTransformInput("x", e.target.value));
   document.getElementById("tpY").addEventListener("input", e => applyTransformInput("y", e.target.value));
+  document.getElementById("tpW").addEventListener("input", e => applyTransformInput("w", e.target.value));
+  document.getElementById("tpH").addEventListener("input", e => applyTransformInput("h", e.target.value));
   document.getElementById("tpRotRange").addEventListener("input", e=>{
     document.getElementById("tpRotNum").value = e.target.value;
     applyTransformInput("rotation", e.target.value);
@@ -1550,7 +1586,9 @@ function applyFloorPlan(opts){
 function wireImageImport(){
   const btn = document.getElementById("importImageBtn");
   const input = document.getElementById("importImageInput");
-  btn.addEventListener("click", ()=> input.click());
+  // Standalone button removed (floor-plan import lives in the Import Project
+  // wizard); the hidden input is still used by the wizard.
+  if(btn) btn.addEventListener("click", ()=> input.click());
   input.addEventListener("change", e=>{
     const f = e.target.files[0];
     if(f) importFloorPlanImage(f);

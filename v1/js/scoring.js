@@ -32,6 +32,50 @@ function evaluate(){
   // above threw. (Deeper PPE→score weighting is wired up with analysis later.)
   try { _appendPpeFlags(_allDefs); }
   catch(e){ console.warn("[evaluate] PPE pass threw.", e); }
+  // Generic flags that work for any (custom/imported) layout.
+  try { _appendGenericFlags(); }
+  catch(e){ console.warn("[evaluate] generic flag pass threw.", e); }
+  state.flags = dedupeFlags(state.flags);
+}
+
+/* Layout-agnostic flag rules: door blockage and the "vector reaches another
+   tool's operator zone" failure mode. Safe on any layout. */
+function _appendGenericFlags(){
+  if(!Array.isArray(state.flags)) state.flags = [];
+  const tools = _scTools();
+  const doors = _scDoors();
+  const r = id => _scRect(id);
+
+  // Tool blocking / crowding a door or exit.
+  for(const dr of doors){
+    for(const t of tools){
+      const d = rectDist(r(t.id), r(dr.id));
+      const blocks = d < 1.5 || overlapArea(r(t.id), r(dr.id)) > 0.5;
+      if(blocks){
+        const sev = t.risk >= 4 ? "crit" : "warn";
+        state.flags.push({ severity: sev, key:`door-block-${t.id}-${dr.id}`,
+          title:`${t.label} blocks ${dr.label}`,
+          why:`${t.label} sits in/at the doorway of ${dr.label}, obstructing egress and accessibility.`,
+          fix:`Move ${t.label} clear of ${dr.label} (keep ≥ a person-width of clearance).`,
+          zones:[t.id, dr.id] });
+      } else if(d < 5){
+        state.flags.push({ severity:"notice", key:`door-near-${t.id}-${dr.id}`,
+          title:`${t.label} crowds ${dr.label}`,
+          why:`${t.label} is close to ${dr.label}; circulation through the door may be tight.`,
+          fix:`Increase clearance around ${dr.label}.`,
+          zones:[t.id, dr.id] });
+      }
+    }
+  }
+
+  // Kickback / material vector reaching another tool's operator zone.
+  for(const c of _scVectorConflicts()){
+    state.flags.push({ severity:"warn", key:`vec-${c.kind}-${c.from.id}-${c.to.id}`,
+      title:`${c.from.label} ${c.kind} reaches ${c.to.label}'s operator zone`,
+      why:`The ${c.kind} path of ${c.from.label} sweeps through where an operator stands at ${c.to.label}. Someone working at ${c.to.label} could be struck by ${c.kind === "kickback" ? "kickback/debris" : "material being fed"} from ${c.from.label}.`,
+      fix:`Rotate or relocate ${c.from.label} so its ${c.kind} vector points away from ${c.to.label}'s operator footprint, or move ${c.to.label}.`,
+      zones:[c.from.id, c.to.id] });
+  }
 }
 
 /* Flag higher-risk custom tools that declare no required PPE or safety
@@ -78,6 +122,13 @@ function _evaluateBody(_allDefs){
     flags.push({ severity, key, title, why, fix, zones: zones || [] });
   }
 
+  // The detailed rules below reference the built-in Invention Studio layout's
+  // named zones (asm1, corridor, exitN, …). On a custom/imported layout those
+  // are absent — and rect(undefined) returns a far-off degenerate rect, so two
+  // missing zones look "coincident" and misfire (then crash on defs[id].label).
+  // Run the generic overlap check always; gate the named-zone rules behind this.
+  const _isDefaultLayout = !!(Z.mainDesk && Z.corridor && Z.asm1);
+
   // ---------- 1. Object overlap
   const movable = allZoneDefs().filter(d=>!d.fixed && d.cat!=="corridor" && d.cat!=="open" && isIncluded(d.id));
   for(let i=0;i<movable.length;i++){
@@ -95,6 +146,7 @@ function _evaluateBody(_allDefs){
     }
   }
 
+  if(_isDefaultLayout){
   // ---------- 2. Movable too close to emergency exits
   const exits = ["exitN","exitS"];
   for(const def of movable){
@@ -294,6 +346,7 @@ function _evaluateBody(_allDefs){
       }
     }
   }
+  } // end _isDefaultLayout
 
   state.flags = dedupeFlags(flags);
 
@@ -303,10 +356,14 @@ function _evaluateBody(_allDefs){
 
   // ---------- SCORE
   let raw = 0;
+  // Weights are normalized by their total so user-edited preference weights
+  // (which need not sum to 100%) keep the score on the same 20..100 scale.
+  const _wTotal = (typeof metricWeightTotal === "function") ? metricWeightTotal() : 1;
   for(const md of METRIC_DEFS){
     // 1 -> 20%, 5 -> 100%; use (m-1)/4 -> 0..1 mapped to 20..100.
     const norm = ((m[md.id]-1)/4) * 80 + 20;
-    raw += norm * md.weight;
+    const w = (typeof metricWeight === "function") ? metricWeight(md.id) : md.weight;
+    raw += norm * (w / _wTotal);
   }
   // Apply traffic multiplier on congestion-related portion
   const trafficPenalty = state.trafficMode==="peak" ? 6 : (state.trafficMode==="summer" ? -2 : 0);
@@ -347,11 +404,107 @@ function countFlags(){
   return c;
 }
 
-/* ---- METRICS computation: heuristics from layout state ---- */
+/* ==================================================================
+   GENERIC LAYOUT ANALYSIS HELPERS
+   These work for ANY layout (custom/imported), not just the built-in
+   Invention Studio default. Used by the generic metrics + flag rules.
+   ================================================================== */
+function _scIncluded(){
+  return allZoneDefs().filter(d => { const z = state.zones[d.id]; return z && z.included !== false; });
+}
+function _scIsStructural(d){ return d.elementClass === "structural"; }
+function _scIsAmenity(d){ return d.elementClass === "amenity"; }
+// "Tools" = movable, non-structural, non-amenity working elements.
+function _scTools(){
+  return _scIncluded().filter(d => !d.fixed && !_scIsStructural(d) && !_scIsAmenity(d)
+    && d.cat !== "corridor" && d.cat !== "open");
+}
+function _scDoors(){
+  return _scIncluded().filter(d =>
+    (d.elementClass === "structural" && d.subtype === "door") ||
+    d.cat === "exit" || d.cat === "structural-door" ||
+    ["exitN","exitS","entrance"].includes(d.id));
+}
+function _scFloors(){ return _scIncluded().filter(d => d.elementClass === "structural" && d.subtype === "floor"); }
+function _scRect(id){ const z = state.zones[id]; return effectiveRect(id, z, state.activeUse || (z && z.activeUse)); }
+function _scNoPPE(d){
+  const va = d.variableAttrs; if(!va) return false;
+  const ppe = Array.isArray(va.ppe) ? va.ppe : [];
+  return ppe.length === 0 && !((va.safetyPractices||"").trim());
+}
+function _scUsableArea(){
+  const floors = _scFloors();
+  if(!floors.length) return 100*100;             // whole stage if no rooms defined
+  let a = 0; for(const f of floors){ const z = state.zones[f.id]; if(z) a += z.w * z.h; }
+  return a > 0 ? a : 100*100;
+}
+/* World-space (stage %) centers of a tool's operator footprints, accounting
+   for the element's offset, size, principal axis, and rotation. */
+function _scRiskZoneCenters(def, kind){
+  const z = state.zones[def.id]; if(!z) return [];
+  const arr = (kind === "operator") ? (def.operatorFootprints || (def.operatorFootprint ? [def.operatorFootprint] : []))
+                                    : (def[kind] || []);
+  const cx = z.x + z.w/2, cy = z.y + z.h/2;
+  const baseAngle = ((def.principalAxis && def.principalAxis.angle) || 0) + (z.rotation || 0);
+  const a = baseAngle * Math.PI/180, cosA = Math.cos(a), sinA = Math.sin(a);
+  const out = [];
+  for(const e of arr){
+    if(!e || e.type === "none" || e.type === "vector") continue;
+    const ox = (e.offsetX || 0) * (z.w/100), oy = (e.offsetY || 0) * (z.h/100);
+    out.push({ x: cx + (ox*cosA - oy*sinA), y: cy + (ox*sinA + oy*cosA) });
+  }
+  return out;
+}
+/* Detect kickback / material vectors of one tool whose cone reaches the
+   operator footprint of ANOTHER tool — the "inadvertent risk" failure mode. */
+function _scVectorConflicts(){
+  const tools = _scTools();
+  const conflicts = [];
+  const inCone = (px,py, ox,oy, dirDeg, spreadDeg, len) => {
+    const dx = px-ox, dy = py-oy, dd = Math.hypot(dx,dy);
+    if(dd < 0.01 || dd > len) return false;
+    const ang = Math.atan2(dy,dx) * 180/Math.PI;
+    const diff = ((ang - dirDeg + 540) % 360) - 180;
+    return Math.abs(diff) <= (spreadDeg + 6);
+  };
+  for(const A of tools){
+    const za = state.zones[A.id]; if(!za) continue;
+    const acx = za.x+za.w/2, acy = za.y+za.h/2;
+    const baseA = ((A.principalAxis && A.principalAxis.angle)||0) + (za.rotation||0);
+    const vecs = [].concat(A.kickbackVectors||[], A.materialVectors||[])
+                   .filter(v => v && v.type === "vector");
+    if(!vecs.length) continue;
+    for(const v of vecs){
+      const a = baseA*Math.PI/180, cosA=Math.cos(a), sinA=Math.sin(a);
+      const ox=(v.offsetX||0)*(za.w/100), oy=(v.offsetY||0)*(za.h/100);
+      const origX = acx + (ox*cosA - oy*sinA), origY = acy + (ox*sinA + oy*cosA);
+      const dir = baseA + (v.angle||0);
+      const spread = v.angleSpread !== undefined ? v.angleSpread : 12;
+      const isKb = (A.kickbackVectors||[]).includes(v);
+      for(const B of tools){
+        if(B === A) continue;
+        const opc = _scRiskZoneCenters(B, "operator");
+        for(const p of opc){
+          if(inCone(p.x,p.y, origX,origY, dir, spread, 45)){
+            conflicts.push({ from:A, to:B, kind: isKb ? "kickback" : "material" });
+            break;
+          }
+        }
+      }
+    }
+  }
+  return conflicts;
+}
+
+/* ---- METRICS computation: generic heuristics from layout state ---- */
 function computeMetrics(){
   const Z = state.zones;
   const defs = Object.fromEntries(allZoneDefs().map(d=>[d.id,d]));
   const r = id => effectiveRect(id, Z[id], state.activeUse);
+  // Generic path for custom/imported layouts (no built-in named zones).
+  if(!Z.mainDesk || !Z.corridor || !Z.asm1){
+    return _computeMetricsGeneric();
+  }
   const cnt = (function(){
     const c = {crit:0,warn:0,notice:0};
     state.flags.forEach(f=>c[f.severity]++);
@@ -442,4 +595,82 @@ function computeMetrics(){
     flex:       clamp(+flex.toFixed(2),       1, 5),
     beginner:   clamp(+beginner.toFixed(2),   1, 5),
   };
+}
+
+/* Generic metrics for ANY layout — derived from element geometry, risk,
+   doors, rooms, and vector conflicts rather than hard-coded zone ids. */
+function _computeMetricsGeneric(){
+  const Z = state.zones;
+  const tools  = _scTools();
+  const doors  = _scDoors();
+  const hr     = tools.filter(t => t.risk >= 4);
+  const r      = id => _scRect(id);
+  const N = tools.length;
+
+  // occupancy density (footprint area / usable floor area)
+  let occupied = 0; for(const t of tools){ const z = Z[t.id]; if(z) occupied += z.w*z.h; }
+  const density = clamp(occupied / _scUsableArea(), 0, 1.2);
+
+  // overlaps + clustering
+  let overlapPairs = 0, critOverlap = 0, tightPairs = 0;
+  for(let i=0;i<N;i++) for(let j=i+1;j<N;j++){
+    const a = tools[i], b = tools[j];
+    const oa = overlapArea(r(a.id), r(b.id));
+    if(oa > 1){ overlapPairs++; if(a.risk>=4 || b.risk>=4) critOverlap++; }
+    if(rectDist(r(a.id), r(b.id)) < 1.5) tightPairs++;
+  }
+  const vConflicts = _scVectorConflicts();
+  const nearestDoor = id => doors.length ? Math.min(...doors.map(dr => rectDist(r(id), r(dr.id)))) : 25;
+
+  // CONGESTION — free space, clustering, overlaps, traffic
+  let congestion = 5 - density*3.0 - tightPairs*0.25 - overlapPairs*0.3;
+  if(state.trafficMode === "peak") congestion -= 0.8; else if(state.trafficMode === "summer") congestion += 0.3;
+  if(state.activeUse) congestion -= 0.5;
+
+  // SAFETY — overlaps, high-risk near low-risk, vector conflicts, missing PPE
+  let safety = 5 - critOverlap*1.2 - (overlapPairs-critOverlap)*0.4 - vConflicts.length*0.6;
+  for(const h of hr) for(const t of tools){
+    if(t === h) continue;
+    if(t.risk <= 1 && rectDist(r(h.id), r(t.id)) < 5) safety -= 0.3;
+  }
+  safety -= tools.filter(t => (t.risk>=3 || t.operationRisk>=3) && _scNoPPE(t)).length * 0.3;
+
+  // TOOL RISK & SUPERVISION — high-risk tools far from a door/exit
+  let toolRisk = 5;
+  for(const t of tools.filter(t => t.risk >= 3)){
+    const d = nearestDoor(t.id);
+    if(d > 45) toolRisk -= 0.4; else if(d > 30) toolRisk -= 0.2;
+  }
+
+  // ACCESS — tools blocking doors/exits
+  let access = 5;
+  for(const dr of doors) for(const t of tools){
+    const d = rectDist(r(t.id), r(dr.id));
+    if(d < 2) access -= 0.8; else if(d < 5) access -= 0.3;
+  }
+
+  // WORKFLOW — related tools (same category) grouped together
+  let workflow = 4;
+  const byCat = {};
+  for(const t of tools){ const c = t.cat || "_none"; (byCat[c] = byCat[c] || []).push(t); }
+  let frac = 0, groups = 0;
+  for(const c in byCat){
+    const arr = byCat[c]; if(arr.length < 2) continue; groups++;
+    let near = 0, pairs = 0;
+    for(let i=0;i<arr.length;i++) for(let j=i+1;j<arr.length;j++){ pairs++; if(rectDist(r(arr[i].id), r(arr[j].id)) < 28) near++; }
+    frac += pairs ? near/pairs : 0;
+  }
+  if(groups) workflow = 3 + 2*(frac/groups);
+
+  // FLEXIBILITY — open floor ratio
+  let flex = clamp(5*(1 - density), 1, 5);
+
+  // BEGINNER APPROACHABILITY — high-risk away from doors, beginner tools near
+  let beginner = 5;
+  for(const h of hr){ if(nearestDoor(h.id) < 8) beginner -= 0.4; }
+  for(const t of tools){ if(t.beginner && nearestDoor(t.id) > 40) beginner -= 0.3; }
+
+  const out = { congestion, safety, toolRisk, access, workflow, flex, beginner };
+  for(const k in out) out[k] = clamp(+(+out[k]).toFixed(2), 1, 5);
+  return out;
 }

@@ -74,13 +74,17 @@ function _adaBuildGrid(stageW, stageH) {
     const z = state.zones[def.id];
     if (!z || !z.included) continue;
     if (!_adaIsBlocking(def)) continue;
-    const c1 = Math.floor((z.x / 100) * stageW / ADA_GRID_RES_FT);
-    const r1 = Math.floor((z.y / 100) * stageH / ADA_GRID_RES_FT);
-    const c2 = Math.ceil(((z.x + z.w) / 100) * stageW / ADA_GRID_RES_FT);
-    const r2 = Math.ceil(((z.y + z.h) / 100) * stageH / ADA_GRID_RES_FT);
-    for (let r = Math.max(0, r1); r < Math.min(rows, r2); r++) {
-      for (let c = Math.max(0, c1); c < Math.min(cols, c2); c++) {
-        grid[r * cols + c] = 1;
+    // Rotation-aware footprint; add the operator footprint when Active Use
+    // mode is on and this tool's active-use toggle is on.
+    const inclOp = !!(state.activeUse && z.activeUse);
+    const { test, aabb } = simBlockerFootprint(def, z, stageW, stageH, inclOp);
+    const c1 = Math.max(0, Math.floor(aabb.x1 / ADA_GRID_RES_FT));
+    const r1 = Math.max(0, Math.floor(aabb.y1 / ADA_GRID_RES_FT));
+    const c2 = Math.min(cols, Math.ceil(aabb.x2 / ADA_GRID_RES_FT));
+    const r2 = Math.min(rows, Math.ceil(aabb.y2 / ADA_GRID_RES_FT));
+    for (let r = r1; r < r2; r++) {
+      for (let c = c1; c < c2; c++) {
+        if (test((c + 0.5) * ADA_GRID_RES_FT, (r + 0.5) * ADA_GRID_RES_FT)) grid[r * cols + c] = 1;
       }
     }
   }

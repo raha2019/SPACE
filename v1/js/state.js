@@ -70,7 +70,27 @@ const state = {
   // Snap-to-grid dashboard layout: { cols, items:{ widgetId:{x,y,w,h} } }
   // in grid units. null until initDashboard() seeds it from defaults.
   dashboard:null,
+  // User-overridden wall-type colors from the draw editor's key.
+  wallTypeColors:null,
+  // User preference weighting for the weighted-metrics score. null = use the
+  // METRIC_DEFS defaults; otherwise a map metricId -> fractional weight.
+  // Saved in the autosave snapshot and the exported configuration.
+  metricWeights:null,
 };
+
+/* Effective weight for a metric (user override or the built-in default). */
+function metricWeight(id){
+  if(state.metricWeights && Number.isFinite(state.metricWeights[id])) return state.metricWeights[id];
+  const md = METRIC_DEFS.find(m => m.id === id);
+  return md ? md.weight : 0;
+}
+function metricWeightTotal(){
+  let t = 0; for(const md of METRIC_DEFS) t += metricWeight(md.id);
+  return t || 1;
+}
+function defaultMetricWeights(){
+  const o = {}; for(const md of METRIC_DEFS) o[md.id] = md.weight; return o;
+}
 
 /* ------------------------------------------------------------------
    4.5  PERSISTENCE — autosave snapshot to localStorage so the user's
@@ -117,6 +137,8 @@ function saveAppState(){
           analysisLastSim: state.analysisLastSim,
           transformPanelPos: state.transformPanelPos,
           dashboard: state.dashboard,
+          wallTypeColors: state.wallTypeColors,
+          metricWeights: state.metricWeights,
         },
       };
       localStorage.setItem(_PERSIST_KEY, JSON.stringify(snap));
@@ -275,6 +297,23 @@ function rectDist(a,b){
 }
 function dist(ax,ay,bx,by){ return Math.hypot(ax-bx, ay-by); }
 function clamp(v,lo,hi){ return Math.max(lo,Math.min(hi,v)); }
+
+/* Clamp a zone's top-left (x,y) so its ROTATED footprint stays on the stage.
+   Zones rotate about their center, so the on-stage extent is the rotated
+   axis-aligned bounding box: effW = |w·cos|+|h·sin|, effH = |w·sin|+|h·cos|.
+   Returns the clamped {x,y}. (Without this, dragging clamps to the unrotated
+   w/h and a rotated element clips off the top/bottom or sides.) */
+function clampZonePos(z, nx, ny){
+  if(!z) return { x:nx, y:ny };
+  const rot = (z.rotation || 0) * Math.PI / 180;
+  const c = Math.abs(Math.cos(rot)), s = Math.abs(Math.sin(rot));
+  const effW = z.w * c + z.h * s;
+  const effH = z.w * s + z.h * c;
+  let cx = nx + z.w / 2, cy = ny + z.h / 2;          // current center
+  cx = (effW >= 100) ? 50 : clamp(cx, effW / 2, 100 - effW / 2);
+  cy = (effH >= 100) ? 50 : clamp(cy, effH / 2, 100 - effH / 2);
+  return { x: cx - z.w / 2, y: cy - z.h / 2 };
+}
 function segIntersectRect(p1,p2,r){
   // Check if a line segment p1-p2 intersects rect r (Liang-Barsky-ish).
   const x1=p1.x,y1=p1.y,x2=p2.x,y2=p2.y;
@@ -290,6 +329,68 @@ function segIntersectRect(p1,p2,r){
     }
   }
   return true;
+}
+
+/* ------------------------------------------------------------------
+   SIM OBSTACLE FOOTPRINT — shared by the ADA & egress grids.
+   Returns { test(xFt,yFt)->bool, aabb:{x1,y1,x2,y2} } in feet for an
+   element's blocking footprint, RESPECTING ROTATION (rotated rect, not
+   AABB). When includeOperator is true (Active Use mode + the tool's
+   active-use toggle), the operator footprint(s) are added so a present
+   operator also blocks. Geometry is in stage feet (stageW/stageH).
+   ------------------------------------------------------------------ */
+function _ptInRotRect(xf, yf, s){
+  const dx = xf - s.cx, dy = yf - s.cy;
+  const c = Math.cos(-s.ang), si = Math.sin(-s.ang);
+  const lx = dx * c - dy * si, ly = dx * si + dy * c;
+  return Math.abs(lx) <= s.hw && Math.abs(ly) <= s.hh;
+}
+function _ptInRotEllipse(xf, yf, s){
+  const dx = xf - s.cx, dy = yf - s.cy;
+  const c = Math.cos(-s.ang), si = Math.sin(-s.ang);
+  const lx = dx * c - dy * si, ly = dx * si + dy * c;
+  const rx = s.rx || 1e-6, ry = s.ry || 1e-6;
+  return (lx*lx)/(rx*rx) + (ly*ly)/(ry*ry) <= 1;
+}
+function simBlockerFootprint(def, z, stageW, stageH, includeOperator){
+  const cxf = (z.x + z.w/2)/100 * stageW;
+  const cyf = (z.y + z.h/2)/100 * stageH;
+  const Wf  = z.w/100 * stageW, Hf = z.h/100 * stageH;
+  const rot = (z.rotation || 0) * Math.PI/180;
+  const cosR = Math.cos(rot), sinR = Math.sin(rot);
+  const shapes = [{ kind:"rect", cx:cxf, cy:cyf, hw:Wf/2, hh:Hf/2, ang:rot }];
+
+  if(includeOperator){
+    const axisAng = ((def.principalAxis && def.principalAxis.angle) || 0) * Math.PI/180;
+    const ops = (Array.isArray(def.operatorFootprints) && def.operatorFootprints.length)
+      ? def.operatorFootprints
+      : (def.operatorFootprint && def.operatorFootprint.type && def.operatorFootprint.type !== "none" ? [def.operatorFootprint] : []);
+    for(const op of ops){
+      if(!op || op.type === "none") continue;
+      const ox = op.offsetX || 0, oy = op.offsetY || 0;     // local 0-100 from center
+      const dxf = (ox/100) * Wf, dyf = (oy/100) * Hf;        // bbox-aligned feet
+      const fx = cxf + (dxf*cosR - dyf*sinR);
+      const fy = cyf + (dxf*sinR + dyf*cosR);
+      if(op.type === "radius"){
+        const r = (op.radius || 15)/100;
+        shapes.push({ kind:"ellipse", cx:fx, cy:fy, rx:r*Wf, ry:r*Hf, ang:rot });
+      } else if(op.type === "shape"){
+        shapes.push({ kind:"rect", cx:fx, cy:fy, hw:(op.w||20)/100*Wf/2, hh:(op.h||15)/100*Hf/2, ang:rot + axisAng });
+      }
+    }
+  }
+
+  // AABB over all shapes (rough: use circumscribed radius per shape)
+  let x1=Infinity,y1=Infinity,x2=-Infinity,y2=-Infinity;
+  for(const s of shapes){
+    const reach = (s.kind === "ellipse") ? Math.max(s.rx, s.ry)
+                                         : Math.hypot(s.hw, s.hh);
+    x1 = Math.min(x1, s.cx - reach); y1 = Math.min(y1, s.cy - reach);
+    x2 = Math.max(x2, s.cx + reach); y2 = Math.max(y2, s.cy + reach);
+  }
+  const test = (xf, yf) => shapes.some(s =>
+    s.kind === "ellipse" ? _ptInRotEllipse(xf, yf, s) : _ptInRotRect(xf, yf, s));
+  return { test, aabb:{ x1, y1, x2, y2 } };
 }
 
 /* "Active use" expands assembly/work zone footprints to simulate

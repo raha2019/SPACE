@@ -70,16 +70,18 @@ function _egressBuildGrid(stageW, stageH) {
     const isBlocking = _egressIsBlocking(def);
     const val = isExit ? 2 : (isBlocking ? 1 : 0);
     if (val === 0) continue;
-    const c1 = Math.floor((z.x / 100) * stageW / EGRESS_GRID_RES_FT);
-    const r1 = Math.floor((z.y / 100) * stageH / EGRESS_GRID_RES_FT);
-    const c2 = Math.ceil(((z.x + z.w) / 100) * stageW / EGRESS_GRID_RES_FT);
-    const r2 = Math.ceil(((z.y + z.h) / 100) * stageH / EGRESS_GRID_RES_FT);
-    for (let r = Math.max(0, r1); r < Math.min(rows, r2); r++) {
-      for (let c = Math.max(0, c1); c < Math.min(cols, c2); c++) {
+    // Rotation-aware footprint; add operator footprint under Active Use mode.
+    const inclOp = !isExit && !!(state.activeUse && z.activeUse);
+    const { test, aabb } = simBlockerFootprint(def, z, stageW, stageH, inclOp);
+    const c1 = Math.max(0, Math.floor(aabb.x1 / EGRESS_GRID_RES_FT));
+    const r1 = Math.max(0, Math.floor(aabb.y1 / EGRESS_GRID_RES_FT));
+    const c2 = Math.min(cols, Math.ceil(aabb.x2 / EGRESS_GRID_RES_FT));
+    const r2 = Math.min(rows, Math.ceil(aabb.y2 / EGRESS_GRID_RES_FT));
+    for (let r = r1; r < r2; r++) {
+      for (let c = c1; c < c2; c++) {
+        if (!test((c + 0.5) * EGRESS_GRID_RES_FT, (r + 0.5) * EGRESS_GRID_RES_FT)) continue;
         // Exit value (2) overrides obstacle value (1) so exits stay passable.
-        if (val === 2 || grid[r * cols + c] !== 2) {
-          grid[r * cols + c] = val;
-        }
+        if (val === 2 || grid[r * cols + c] !== 2) grid[r * cols + c] = val;
       }
     }
   }
@@ -148,54 +150,7 @@ function _egressMaxDeadEnd(dist, grid, cols, rows) {
   return maxLen;
 }
 
-/* Fire-extinguisher coverage mask. Any cell whose Euclidean distance to
-   any included fire-extinguisher amenity is within that extinguisher's
-   coverage radius gets marked. Painted as a soft green tint over the
-   travel-distance heatmap and reported as a coverage percentage. */
-function _egressFireCoverage(stageW, stageH, cols, rows) {
-  const coverage = new Uint8Array(cols * rows);
-  const points = [];
-  for (const def of (state.amenityElements || [])) {
-    const isExt = (def.subtype === "fire_extinguisher") ||
-      /fire\s*extinguisher/i.test(def.label || "");
-    if (!isExt) continue;
-    const z = state.zones[def.id];
-    if (!z || !z.included) continue;
-    const cxFt = ((z.x + z.w / 2) / 100) * stageW;
-    const cyFt = ((z.y + z.h / 2) / 100) * stageH;
-    const rFt  = Number.isFinite(def.coverage) && def.coverage > 0 ? def.coverage : 25;
-    points.push({ cxFt, cyFt, rFt });
-  }
-  if (!points.length) return { coverage, covered: 0, total: cols * rows, count: 0 };
-  let covered = 0;
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      const xFt = (c + 0.5) * EGRESS_GRID_RES_FT;
-      const yFt = (r + 0.5) * EGRESS_GRID_RES_FT;
-      for (const p of points) {
-        if (Math.hypot(xFt - p.cxFt, yFt - p.cyFt) <= p.rFt) {
-          coverage[r * cols + c] = 1; covered++; break;
-        }
-      }
-    }
-  }
-  return { coverage, covered, total: cols * rows, count: points.length };
-}
-
-function _egressPaintCoverage(ctx, coverage, cols, rows, canvasW, canvasH) {
-  const cellW = canvasW / cols;
-  const cellH = canvasH / rows;
-  ctx.fillStyle = "rgba(80,220,140,0.22)";
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      if (!coverage[r * cols + c]) continue;
-      ctx.fillRect(
-        Math.round(c * cellW), Math.round(r * cellH),
-        Math.ceil(cellW) + 1, Math.ceil(cellH) + 1
-      );
-    }
-  }
-}
+/* Fire-extinguisher coverage moved to its own simulation (sim_fire.js). */
 
 function _egressPaintCanvas(ctx, dist, grid, cols, rows, canvasW, canvasH) {
   const cellW = canvasW / cols;
@@ -242,8 +197,6 @@ function runEgressCheck() {
   const maxTravel = dist.reduce((mx, d) => d > mx ? d : mx, 0);
   const deadEnd   = _egressMaxDeadEnd(dist, grid, cols, rows);
 
-  const fire = _egressFireCoverage(du.w, du.h, cols, rows);
-
   const canvas = simGetCanvas("egress");
   const stage  = document.getElementById("stage");
   const cw = stage.offsetWidth, ch = stage.offsetHeight;
@@ -251,12 +204,8 @@ function runEgressCheck() {
   const ctx = canvas.getContext("2d");
   ctx.clearRect(0, 0, cw, ch);
   _egressPaintCanvas(ctx, dist, grid, cols, rows, cw, ch);
-  // Paint fire-extinguisher coverage on top so it's still readable.
-  _egressPaintCoverage(ctx, fire.coverage, cols, rows, cw, ch);
 
-  const fireCoveragePct = fire.total > 0 ? (fire.covered / fire.total) * 100 : 0;
-  const result = { occupants, exitCap, maxTravel, deadEnd,
-                   fireExt: { count: fire.count, coveragePct: fireCoveragePct } };
+  const result = { occupants, exitCap, maxTravel, deadEnd };
   simShowEgressResults(result);
   if (typeof _simResultCache !== "undefined") _simResultCache.egress = result;
 }

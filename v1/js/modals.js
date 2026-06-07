@@ -366,7 +366,7 @@ function openAmenityForEdit(def){
   ebAmenityDraft = JSON.parse(JSON.stringify({
     label: def.label,
     subtype: def.subtype || "first_aid",
-    size: def.w || 3,
+    w: def.w || 2, h: def.h || def.w || 2,
     coverage: def.coverage || 15,
   }));
   document.getElementById("elementBuilderBackdrop").classList.add("open");
@@ -471,9 +471,11 @@ function renderChooserExisting(){
     row.innerHTML = `
       <span class="cli-label">${d.label}</span>
       <span class="cli-meta">${typeTag}</span>
+      <button class="cli-dup" data-id="${d.id}" title="Create a copy of this element">Duplicate</button>
       <button class="cli-edit" data-id="${d.id}">Edit</button>
       <button class="cli-del" data-id="${d.id}">Remove</button>
     `;
+    row.querySelector(".cli-dup").addEventListener("click", ()=> duplicateElement(d.id, type));
     row.querySelector(".cli-edit").addEventListener("click", ()=> openElementBuilderForEdit(d.id));
     row.querySelector(".cli-del").addEventListener("click", ()=>{
       if(type === "tool") deleteCustomElement(d.id);
@@ -482,6 +484,36 @@ function renderChooserExisting(){
     });
     listEl.appendChild(row);
   }
+}
+
+/* Duplicate a custom element (tool / structural / amenity): deep-clone with a
+   fresh id, "(copy)" label, and a small position offset so it's visible. */
+function duplicateElement(id, type){
+  const coll = type === "tool" ? state.customElements
+             : type === "structural" ? state.structuralElements
+             : state.amenityElements;
+  const def = coll.find(d => d.id === id);
+  if(!def) return;
+  const copy = JSON.parse(JSON.stringify(def));
+  const taken = new Set(allZoneDefs().map(x => x.id));
+  let base = id + "_copy", n = 2, nid = base;
+  while(taken.has(nid)){ nid = base + "_" + n; n++; }
+  copy.id = nid;
+  copy.label = (def.label || "Element") + " (copy)";
+  if(copy.short !== undefined) copy.short = copy.label.slice(0, 10);
+  const off = 3;
+  // Keep a drawn element's reload geometry consistent with its offset position.
+  if(copy.rawDraw && Array.isArray(copy.rawDraw.points)){
+    copy.rawDraw.points = copy.rawDraw.points.map(p => ({ x: clamp(p.x + off, 0, 100), y: clamp(p.y + off, 0, 100) }));
+  }
+  coll.push(copy);
+  const z = state.zones[id];
+  state.zones[nid] = z
+    ? { ...z, x: clamp((z.x||0) + off, 0, 100 - (z.w||0)), y: clamp((z.y||0) + off, 0, 100 - (z.h||0)) }
+    : { x:5, y:5, w: copy.w || 8, h: copy.h || 6, rotation:0, included:true, activeUse:false, locked: !!copy.fixed };
+  evaluate(); render();
+  renderChooserExisting();
+  if(typeof saveAppState === "function") saveAppState();
 }
 
 /* --- Form ⇄ draft mapping ---
@@ -498,7 +530,7 @@ function builderInputToPct(v, axis){
 }
 function updateBuilderUnitLabels(){
   const u = unitLabel();
-  for(const id of ["ebWUnit","ebHUnit","amSizeUnit","amCoverageUnit"]){
+  for(const id of ["ebWUnit","ebHUnit","amWidthUnit","amHeightUnit","amCoverageUnit"]){
     const el = document.getElementById(id);
     if(el) el.textContent = hasScale() ? u : "% of stage";
   }
@@ -782,8 +814,8 @@ function loadDraftIntoForm(){
   document.querySelectorAll(".eb-ppe-cb").forEach(cb => { cb.checked = _ppe.includes(cb.dataset.ppe); });
   const _sp = document.getElementById("ebSafetyPractices");
   if(_sp) _sp.value = ebDraft.variableAttrs.safetyPractices || "";
-  // Noise-source fields (left blank = not an emitter; sim_noise filters those out).
-  document.getElementById("ebDbaActive").value = (ebDraft.dba_active    !== undefined && ebDraft.dba_active    !== null) ? ebDraft.dba_active    : "";
+  // Noise source: the operating dBA is the same "Operating Noise" field in
+  // Variable Attributes (ebNoise); only schedule probability is separate.
   document.getElementById("ebSchedProb").value = (ebDraft.schedule_prob !== undefined && ebDraft.schedule_prob !== null) ? ebDraft.schedule_prob : "";
   updateBuilderPreview();
   renderShapeList();
@@ -818,10 +850,8 @@ function readFormIntoDraft(){
     .filter(cb => cb.checked).map(cb => cb.dataset.ppe);
   const _spIn = document.getElementById("ebSafetyPractices");
   ebDraft.variableAttrs.safetyPractices = _spIn ? _spIn.value.trim() : "";
-  // Noise-source fields — empty stays empty so the sim treats the tool as silent.
-  const dbaRaw  = document.getElementById("ebDbaActive").value.trim();
+  // Noise source: operating dBA = the Operating Noise field (variableAttrs.noiseDb).
   const probRaw = document.getElementById("ebSchedProb").value.trim();
-  ebDraft.dba_active    = dbaRaw  === "" ? null : parseFloat(dbaRaw);
   ebDraft.schedule_prob = probRaw === "" ? null : Math.max(0, Math.min(1, parseFloat(probRaw)));
 }
 
@@ -951,13 +981,15 @@ const RISK_ZONE_ARRAY_KEYS = {
   material:    "materialVectors",
 };
 
-// Vector kinds: vectors only support the "vector" type, footprints
-// support all three (none is implied by deleting the entry).
+// Default type per zone. Material loading is a BOUNDED footprint (a staging
+// clearance area) like operator/maintenance — not an infinite "vector" cone,
+// which read as the tool's boundary and swept oddly on rotation. Kickback
+// stays a vector (a hazard that travels until it hits a wall).
 const RISK_ZONE_DEFAULT_TYPE = {
   operator:    "radius",
   maintenance: "shape",
   kickback:    "vector",
-  material:    "vector",
+  material:    "shape",
 };
 
 function _rzNewEntry(zone){
@@ -969,9 +1001,9 @@ function _rzNewEntry(zone){
 
 function _rzEntryHTML(zone, entry, i){
   const u = unitLabel();
-  const allowed = (zone === "kickback" || zone === "material")
-    ? ["vector","radius","shape"]
-    : ["radius","shape","vector"];
+  const allowed = (zone === "kickback")
+    ? ["vector","radius","shape"]   // kickback is a travelling hazard → vector first
+    : ["radius","shape","vector"];  // operator / maintenance / material → footprints first
   const typeOpts = allowed.map(t =>
     `<option value="${t}"${entry.type === t ? " selected" : ""}>${
       t === "radius" ? "Radius" : t === "shape" ? "Rectangle" : "Vector"
@@ -1113,63 +1145,47 @@ function drawShapeCanvasInto(gridId, contentId, suffix){
   const content = document.getElementById(contentId);
   const grid = document.getElementById(gridId);
   if(!content || !grid) return;
-  // Grid lines (10% spacing)
-  let g = "";
-  for(let i=10;i<100;i+=10){
-    g += `<line class="grid-line" x1="${i}" y1="0" x2="${i}" y2="100"/>`;
-    g += `<line class="grid-line" x1="0" y1="${i}" x2="100" y2="${i}"/>`;
-  }
-  g += `<line class="center-line" x1="50" y1="0" x2="50" y2="100"/>`;
-  g += `<line class="center-line" x1="0" y1="50" x2="100" y2="50"/>`;
-  grid.innerHTML = g;
 
-  // Draft coords are absolute (% of stage). The preview SVG uses
-  // viewBox 0-100 representing the bounding box, so we normalize on the
-  // fly using the same shape-only extent that saveCustomElement will use.
-  const _pvExt = _ebOnlyShapeExtent(ebDraft.shapes) || { x1:0, y1:0, w:100, h:100 };
-  const fakeDef = {
-    id: "_preview",
-    shapes: (ebDraft.shapes || []).map(sh => _normShape(sh, _pvExt)),
-    principalAxis: ebDraft.principalAxis,
-    operatorFootprints:    (ebDraft.operatorFootprints    || []).map(z => _normRiskZone(z, _pvExt)),
-    maintenanceFootprints: (ebDraft.maintenanceFootprints || []).map(z => _normRiskZone(z, _pvExt)),
-    kickbackVectors:       (ebDraft.kickbackVectors       || []).map(z => _normRiskZone(z, _pvExt)),
-    materialVectors:       (ebDraft.materialVectors       || []).map(z => _normRiskZone(z, _pvExt)),
-  };
+  // Render in ABSOLUTE stage-% coordinates (the same space the draft stores)
+  // so the preview keeps the footprint's true aspect ratio. The SVG uses
+  // preserveAspectRatio="meet", so the real proportions show un-distorted —
+  // previously shapes were normalized to a 0-100 box and always looked square.
+  const shapes = ebDraft.shapes || [];
+  const ext = _ebOnlyShapeExtent(shapes) || { x1:40, y1:40, x2:60, y2:60, w:20, h:20 };
+  const cx0 = ext.x1 + ext.w / 2, cy0 = ext.y1 + ext.h / 2;
+  const ang = (ebDraft.principalAxis && ebDraft.principalAxis.angle) || 0;
+  const angRad = ang * Math.PI / 180;
+
+  // 1) footprint shapes
   let inner = "";
-  (fakeDef.shapes || []).forEach(sh=>{
+  shapes.forEach(sh=>{
     if(sh.type === "rect"){
       inner += `<rect class="footprint-shape" x="${sh.x}" y="${sh.y}" width="${sh.w}" height="${sh.h}"${sh.rotation?` transform="rotate(${sh.rotation} ${sh.x+sh.w/2} ${sh.y+sh.h/2})"`:""}/>`;
     } else if(sh.type === "circle"){
       inner += `<circle class="footprint-shape" cx="${sh.x}" cy="${sh.y}" r="${sh.radius}"/>`;
+    } else if(sh.type === "polygon"){
+      inner += `<polygon class="footprint-shape" points="${(sh.points||[]).map(p=>p.x+","+p.y).join(" ")}"/>`;
     }
   });
-  const ang = (fakeDef.principalAxis && fakeDef.principalAxis.angle) || 0;
-  const angRad = ang * Math.PI/180;
 
+  // 2) risk zones — centered on the element center in absolute coords
   function rzSVG(z, cls){
     if(!z || z.type === "none") return "";
     if(z.type === "radius"){
-      return `<circle class="${cls}" cx="50" cy="50" r="${z.radius || 15}"/>`;
+      return `<circle class="${cls}" cx="${cx0}" cy="${cy0}" r="${z.radius || 5}"/>`;
     }
     if(z.type === "shape"){
-      const w = z.w || 20, h = z.h || 15;
+      const w = z.w || 10, h = z.h || 8;
       const ox = z.offsetX !== undefined ? z.offsetX : (z.offset !== undefined ? Math.cos(angRad)*z.offset : 0);
       const oy = z.offsetY !== undefined ? z.offsetY : (z.offset !== undefined ? Math.sin(angRad)*z.offset : 0);
-      // Note: shape zones rotate with the principal axis so "along axis"
-      // semantics stay intuitive even after axis rotation.
-      return `<rect class="${cls}" x="${50 - w/2 + ox}" y="${50 - h/2 + oy}" width="${w}" height="${h}" transform="rotate(${ang} ${50 + ox} ${50 + oy})"/>`;
+      return `<rect class="${cls}" x="${cx0 - w/2 + ox}" y="${cy0 - h/2 + oy}" width="${w}" height="${h}" transform="rotate(${ang} ${cx0 + ox} ${cy0 + oy})"/>`;
     }
     if(z.type === "vector"){
-      // Cone preview: origin = element center + offset, direction =
-      // principal axis + per-vector angle. Magnitude infinite on stage;
-      // here we cap at the local preview box edge so it stays readable.
       const spread = z.angleSpread !== undefined ? z.angleSpread : 12;
       const extraAng = (z.angle || 0) * Math.PI / 180;
       const sRad = spread * Math.PI / 180;
-      const L = 80;
-      const cx = 50 + (z.offsetX || 0);
-      const cy = 50 + (z.offsetY || 0);
+      const L = Math.max(ext.w, ext.h) * 1.1;   // readable cone length
+      const cx = cx0 + (z.offsetX || 0), cy = cy0 + (z.offsetY || 0);
       const dir = angRad + extraAng;
       const tipL = { x: cx + Math.cos(dir - sRad) * L, y: cy + Math.sin(dir - sRad) * L };
       const tipR = { x: cx + Math.cos(dir + sRad) * L, y: cy + Math.sin(dir + sRad) * L };
@@ -1177,45 +1193,47 @@ function drawShapeCanvasInto(gridId, contentId, suffix){
     }
     return "";
   }
-  for(const e of fakeDef.operatorFootprints)    inner += rzSVG(e, "op-zone");
-  for(const e of fakeDef.maintenanceFootprints) inner += rzSVG(e, "mt-zone");
-  for(const e of fakeDef.kickbackVectors)       inner += rzSVG(e, "kb-vector");
-  for(const e of fakeDef.materialVectors)       inner += rzSVG(e, "mat-vector");
+  for(const e of (ebDraft.operatorFootprints    || [])) inner += rzSVG(e, "op-zone");
+  for(const e of (ebDraft.maintenanceFootprints || [])) inner += rzSVG(e, "mt-zone");
+  for(const e of (ebDraft.kickbackVectors       || [])) inner += rzSVG(e, "kb-vector");
+  for(const e of (ebDraft.materialVectors       || [])) inner += rzSVG(e, "mat-vector");
 
-  if(fakeDef.principalAxis && fakeDef.principalAxis.length > 0){
-    const x2 = 50 + Math.cos(angRad)*fakeDef.principalAxis.length/2;
-    const y2 = 50 + Math.sin(angRad)*fakeDef.principalAxis.length/2;
-    inner += `<line class="axis-arrow" x1="50" y1="50" x2="${x2}" y2="${y2}"/>`;
+  // 3) principal axis (length is % of bounding box → scale per axis)
+  const axLen = (ebDraft.principalAxis && ebDraft.principalAxis.length) || 0;
+  if(axLen > 0){
+    const x2 = cx0 + Math.cos(angRad) * (axLen / 100) * ext.w / 2;
+    const y2 = cy0 + Math.sin(angRad) * (axLen / 100) * ext.h / 2;
+    inner += `<line class="axis-arrow" x1="${cx0}" y1="${cy0}" x2="${x2.toFixed(2)}" y2="${y2.toFixed(2)}"/>`;
   }
   content.innerHTML = inner;
 
-  // Adjust the SVG viewBox so non-vector risk zones that reach beyond the
-  // footprint bounding box are visible instead of being clipped. Vectors
-  // are intentionally allowed to crop because they're conceptually
-  // infinite (wall-clipped at stage time).
-  let minX = 0, minY = 0, maxX = 100, maxY = 100;
-  const expand = (x, y) => {
-    if(x < minX) minX = x; if(y < minY) minY = y;
-    if(x > maxX) maxX = x; if(y > maxY) maxY = y;
-  };
-  for(const arr of [fakeDef.operatorFootprints, fakeDef.maintenanceFootprints,
-                    fakeDef.kickbackVectors,    fakeDef.materialVectors]){
+  // 4) viewBox = footprint extent, expanded for non-vector risk zones.
+  let minX = ext.x1, minY = ext.y1, maxX = ext.x2, maxY = ext.y2;
+  const expand = (x, y) => { if(x<minX)minX=x; if(y<minY)minY=y; if(x>maxX)maxX=x; if(y>maxY)maxY=y; };
+  for(const arr of [ebDraft.operatorFootprints, ebDraft.maintenanceFootprints,
+                    ebDraft.kickbackVectors,    ebDraft.materialVectors]){
     for(const z of (arr || [])){
       if(!z || z.type === "vector" || z.type === "none") continue;
       if(z.type === "radius"){
-        const r = z.radius || 0;
-        expand(50 - r, 50 - r); expand(50 + r, 50 + r);
+        const r = z.radius || 0; expand(cx0 - r, cy0 - r); expand(cx0 + r, cy0 + r);
       } else if(z.type === "shape"){
-        const ox = z.offsetX || 0, oy = z.offsetY || 0;
-        const w  = z.w || 0,       h  = z.h || 0;
-        expand(50 + ox - w/2, 50 + oy - h/2);
-        expand(50 + ox + w/2, 50 + oy + h/2);
+        const ox = z.offsetX || 0, oy = z.offsetY || 0, w = z.w || 0, h = z.h || 0;
+        expand(cx0 + ox - w/2, cy0 + oy - h/2); expand(cx0 + ox + w/2, cy0 + oy + h/2);
       }
     }
   }
-  const pad = Math.max(3, (maxX - minX) * 0.04);
+  const pad = Math.max(2, (maxX - minX) * 0.08, (maxY - minY) * 0.08);
   const vbX = minX - pad, vbY = minY - pad;
-  const vbW = (maxX - minX) + pad * 2, vbH = (maxY - minY) + pad * 2;
+  const vbW = Math.max(1, (maxX - minX) + pad * 2), vbH = Math.max(1, (maxY - minY) + pad * 2);
+
+  // grid lines at 10-unit (stage %) intervals across the viewBox + center cross
+  let g = "";
+  for(let x = Math.floor(vbX/10)*10; x <= vbX+vbW; x += 10) g += `<line class="grid-line" x1="${x}" y1="${vbY.toFixed(2)}" x2="${x}" y2="${(vbY+vbH).toFixed(2)}"/>`;
+  for(let y = Math.floor(vbY/10)*10; y <= vbY+vbH; y += 10) g += `<line class="grid-line" x1="${vbX.toFixed(2)}" y1="${y}" x2="${(vbX+vbW).toFixed(2)}" y2="${y}"/>`;
+  g += `<line class="center-line" x1="${cx0}" y1="${vbY.toFixed(2)}" x2="${cx0}" y2="${(vbY+vbH).toFixed(2)}"/>`;
+  g += `<line class="center-line" x1="${vbX.toFixed(2)}" y1="${cy0}" x2="${(vbX+vbW).toFixed(2)}" y2="${cy0}"/>`;
+  grid.innerHTML = g;
+
   const svgGrid    = grid.closest("svg")    || grid.parentNode;
   const svgContent = content.closest("svg") || content.parentNode;
   for(const svg of [svgGrid, svgContent]){
@@ -1305,9 +1323,10 @@ function buildDefFromDraft(d, id){
     kickbackVectors:       JSON.parse(JSON.stringify(d.kickbackVectors       || [])),
     materialVectors:       JSON.parse(JSON.stringify(d.materialVectors       || [])),
     variableAttrs: JSON.parse(JSON.stringify(d.variableAttrs)),
-    // Noise-source fields — kept at top level so sim_noise.js can read
-    // them directly off the def (it does def.dba_active / def.schedule_prob).
-    dba_active:    Number.isFinite(d.dba_active)    ? d.dba_active    : undefined,
+    // Noise source for sim_noise.js: the operating dBA IS the Operating Noise
+    // attribute (variableAttrs.noiseDb); schedule probability is separate.
+    // sim_noise filters out anything at/below ambient, so quiet tools are skipped.
+    dba_active:    (d.variableAttrs && Number.isFinite(d.variableAttrs.noiseDb) && d.variableAttrs.noiseDb > 0) ? d.variableAttrs.noiseDb : undefined,
     schedule_prob: Number.isFinite(d.schedule_prob) ? d.schedule_prob : undefined,
   };
 }
@@ -1660,7 +1679,7 @@ function blankAmenityDraft(){
   return {
     label: "",
     subtype: "fire_extinguisher",
-    size: 3,
+    w: 2, h: 2,
     coverage: 12,
   };
 }
@@ -1691,7 +1710,8 @@ function loadAmenityDraftIntoForm(){
   if(!ebAmenityDraft) return;
   updateBuilderUnitLabels();
   document.getElementById("amLabel").value = ebAmenityDraft.label;
-  document.getElementById("amSize").value = builderDisplayDim(ebAmenityDraft.size, "x");
+  document.getElementById("amWidth").value  = builderDisplayDim(ebAmenityDraft.w, "x");
+  document.getElementById("amHeight").value = builderDisplayDim(ebAmenityDraft.h, "y");
   document.getElementById("amCoverage").value = builderDisplayDim(ebAmenityDraft.coverage, "x");
   // Show bag toggle only for subtypes that support it (e.g. Trash Can).
   const sub = AMENITY_SUBTYPES.find(s=>s.id === ebAmenityDraft.subtype);
@@ -1709,7 +1729,7 @@ function saveAmenityElement(){
   const sub = AMENITY_SUBTYPES.find(s=>s.id === d.subtype);
   const label = (d.label || sub.label).trim();
   if(!label){ alert("Please enter a name."); return; }
-  if(!Number.isFinite(d.size) || d.size <= 0){ alert("Marker size must be positive."); return; }
+  if(!Number.isFinite(d.w) || d.w <= 0 || !Number.isFinite(d.h) || d.h <= 0){ alert("Width and height must be positive."); return; }
 
   const buildDef = (id) => ({
     id, label,
@@ -1719,7 +1739,7 @@ function saveAmenityElement(){
     subtype: d.subtype,
     custom: true,
     fixed: false,
-    w: d.size, h: d.size,
+    w: d.w, h: d.h,
     coverage: d.coverage,
     icon: sub.icon,
     hasBag: sub.hasBag ? !!d.hasBag : undefined,
@@ -1731,7 +1751,7 @@ function saveAmenityElement(){
     const id = state.editingId;
     state.amenityElements[idx] = buildDef(id);
     const z = state.zones[id];
-    if(z){ z.w = d.size; z.h = d.size; }
+    if(z){ z.w = d.w; z.h = d.h; }
   } else {
     const slug = label.toLowerCase().replace(/[^a-z0-9]+/g,"_").replace(/^_|_$/g,"");
     let id = "amenity_" + (slug || d.subtype), n=2;
@@ -1740,7 +1760,7 @@ function saveAmenityElement(){
     state.amenityElements.push(buildDef(id));
     state.zones[id] = {
       x: 0, y: 0,
-      w: d.size, h: d.size, rotation:0,
+      w: d.w, h: d.h, rotation:0,
       included:true, activeUse:false,
       locked: false,
     };
@@ -1803,6 +1823,19 @@ function wireElementBuilder(){
       }
       else if(choice === "new-amenity") startNewAmenity();
       else if(choice === "import-elements") document.getElementById("importElementsInput").click();
+    });
+  });
+
+  // PPE chips: "No PPE required" is mutually exclusive with the specific items.
+  document.querySelectorAll(".eb-ppe-cb").forEach(cb=>{
+    cb.addEventListener("change", ()=>{
+      if(!cb.checked) return;
+      if(cb.dataset.ppe === "none"){
+        document.querySelectorAll(".eb-ppe-cb").forEach(o=>{ if(o !== cb) o.checked = false; });
+      } else {
+        const none = document.querySelector('.eb-ppe-cb[data-ppe="none"]');
+        if(none) none.checked = false;
+      }
     });
   });
 
@@ -1885,8 +1918,11 @@ function wireElementBuilder(){
   document.getElementById("amLabel").addEventListener("input", e=>{
     ebAmenityDraft.label = e.target.value;
   });
-  document.getElementById("amSize").addEventListener("input", e=>{
-    ebAmenityDraft.size = builderInputToPct(parseFloat(e.target.value) || 3, "x");
+  document.getElementById("amWidth").addEventListener("input", e=>{
+    ebAmenityDraft.w = builderInputToPct(parseFloat(e.target.value) || 2, "x");
+  });
+  document.getElementById("amHeight").addEventListener("input", e=>{
+    ebAmenityDraft.h = builderInputToPct(parseFloat(e.target.value) || 2, "y");
   });
   document.getElementById("amCoverage").addEventListener("input", e=>{
     ebAmenityDraft.coverage = builderInputToPct(parseFloat(e.target.value) || 0, "x");

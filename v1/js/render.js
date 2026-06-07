@@ -158,16 +158,26 @@ function renderZones(){
     // Category order drives stage layering: earlier categories sit
     // behind, later ones in front. Zones without a category fall back
     // to a baseline so they don't collide with intentional layering.
-    if(def.cat && Array.isArray(state.categories)){
+    // Layering: structural (walls/floors/doors) is always the bottom layer
+    // so tools and amenities draw on top of it. Categorized tools layer by
+    // category order above that; everything else sits in between.
+    if(def.elementClass === "structural"){
+      el.style.zIndex = "1";
+    } else if(def.cat && Array.isArray(state.categories)){
       const idx = state.categories.findIndex(c => c.id === def.cat);
-      if(idx >= 0) el.style.zIndex = String(10 + idx);
+      el.style.zIndex = String(idx >= 0 ? 10 + idx : 8);
+    } else {
+      el.style.zIndex = "8";
     }
     if(z.rotation){
       el.style.transform = `rotate(${z.rotation}deg)`;
       el.style.transformOrigin = "center center";
     }
 
-    const labelHidden = state.showLabels === false;
+    // Amenities keep their marker icon/label visible even when labels are
+    // off — the icon is the element's identity, not a name annotation.
+    const isAmenity = def.elementClass === "amenity";
+    const labelHidden = state.showLabels === false && !isAmenity;
     el.innerHTML = `
       <div class="row1" style="${labelHidden ? "display:none" : ""}">
         <span class="lbl" title="${def.label}${def.description ? "\n" + def.description : ""}">${def.label}</span>
@@ -235,10 +245,17 @@ function buildCompositeSVG(def){
       c.setAttribute("r", sh.radius);
       svg.appendChild(c);
     } else if(sh.type === "polygon"){
-      // Free-form footprint (walls, rooms) drawn in the wall editor.
+      // Free-form footprint (walls, doors, rooms) drawn in the wall editor.
       const poly = document.createElementNS(ns,"polygon");
       poly.setAttribute("class","fp");
       poly.setAttribute("points", (sh.points||[]).map(p=>`${p.x},${p.y}`).join(" "));
+      // Per-instance color (from the editable wall-type key) overrides CSS.
+      if(def.color){
+        poly.style.stroke = def.color;
+        poly.style.fill   = def.color;
+        poly.style.fillOpacity = (def.subtype === "construction") ? 0.14
+                               : (def.subtype === "floor") ? 0 : 0.55;
+      }
       svg.appendChild(poly);
     }
   });
@@ -276,26 +293,32 @@ function buildCompositeSVG(def){
 function drawRiskZone(svg, zone, cls, axisAngle, uid){
   if(!zone || zone.type === "none") return;
   const ns = "http://www.w3.org/2000/svg";
+  const ang = axisAngle || 0;
+  // Resolve the offset exactly like the Element Builder live preview: prefer
+  // offsetX/offsetY, fall back to the legacy single `offset` along the axis.
+  // (Previously the stage ignored offsetX/offsetY, so footprints rendered
+  // centered on the tool and didn't match the preview.)
+  let ox = zone.offsetX, oy = zone.offsetY;
+  if(ox === undefined && zone.offset !== undefined){
+    const a = ang * Math.PI / 180;
+    ox = Math.cos(a) * zone.offset; oy = Math.sin(a) * zone.offset;
+  }
+  ox = ox || 0; oy = oy || 0;
   if(zone.type === "radius"){
     const c = document.createElementNS(ns,"circle");
     c.setAttribute("class", cls);
-    c.setAttribute("cx", "50"); c.setAttribute("cy","50");
+    c.setAttribute("cx", 50 + ox); c.setAttribute("cy", 50 + oy);
     c.setAttribute("r", zone.radius || 30);
     svg.appendChild(c);
   } else if(zone.type === "shape"){
     const r = document.createElementNS(ns,"rect");
     r.setAttribute("class", cls);
     const w = zone.w || 40, h = zone.h || 20;
-    r.setAttribute("x", 50 - w/2);
-    r.setAttribute("y", 50 - h/2);
+    r.setAttribute("x", 50 - w/2 + ox);
+    r.setAttribute("y", 50 - h/2 + oy);
     r.setAttribute("width", w);
     r.setAttribute("height", h);
-    if(zone.offset){
-      const ang = axisAngle * Math.PI/180;
-      const dx = Math.cos(ang) * zone.offset;
-      const dy = Math.sin(ang) * zone.offset;
-      r.setAttribute("transform", `translate(${dx} ${dy}) rotate(${axisAngle} ${50} ${50})`);
-    }
+    r.setAttribute("transform", `rotate(${ang} ${50 + ox} ${50 + oy})`);
     svg.appendChild(r);
   } else if(zone.type === "vector"){
     // Vector cones are drawn at the stage level (see renderVectorOverlay)
@@ -369,11 +392,11 @@ function attachZoneInteractions(el, def){
       nx = Math.round(nx/2)*2;
       ny = Math.round(ny/2)*2;
     }
-    nx = clamp(nx, 0, 100 - z.w);
-    ny = clamp(ny, 0, 100 - z.h);
-    z.x = nx; z.y = ny;
-    el.style.left = nx+"%";
-    el.style.top  = ny+"%";
+    // Clamp against the ROTATED footprint so a rotated element can't clip off-stage.
+    const p = clampZonePos(z, nx, ny);
+    z.x = p.x; z.y = p.y;
+    el.style.left = z.x+"%";
+    el.style.top  = z.y+"%";
     // Update transform-panel inputs live while dragging
     if(state.selectedId === def.id) updateTransformPanelInputs();
     evaluate(); render(true);
@@ -399,23 +422,55 @@ function attachDrag(el, def){ attachZoneInteractions(el, def); }
 function renderMetrics(){
   const body = document.getElementById("metricsBody");
   body.innerHTML = "";
+  const total = metricWeightTotal();
   for(const md of METRIC_DEFS){
     const v = state.metrics[md.id] || 0;
     const pct = ((v-1)/4)*100;
     const active = state.heatmapMetric === md.id;
+    const wPct = Math.round(metricWeight(md.id) * 100);
     const div = document.createElement("div");
     div.className = "metric clickable" + (active ? " active" : "");
-    div.title = active ? "Click to hide heatmap" : "Click to show heatmap for this metric";
+    div.title = active ? "Click to hide heatmap" : "Click the label to show this metric's heatmap";
     div.innerHTML = `
-      <div class="lbl"><span>${md.label}${active ? ' <span class="hm-dot" title="Heatmap active">●</span>' : ''}</span><b>${v.toFixed(1)}/5 <span class="muted">·${(md.weight*100)|0}%</span></b></div>
+      <div class="lbl">
+        <span>${md.label}${active ? ' <span class="hm-dot" title="Heatmap active">●</span>' : ''}</span>
+        <b>${v.toFixed(1)}/5
+          <span class="metric-w-wrap" title="Weight — your priority for this metric (edit to re-weight the score)">
+            <input class="metric-w" type="number" min="0" max="100" step="1" value="${wPct}" />%
+          </span>
+        </b>
+      </div>
       <div class="bar rev"><i style="width:${pct}%"></i></div>
     `;
-    div.addEventListener("click", ()=>{
+    div.addEventListener("click", (e)=>{
+      if(e.target.closest(".metric-w-wrap")) return;  // editing weight, not toggling heatmap
       state.heatmapMetric = state.heatmapMetric === md.id ? null : md.id;
       render(true);
     });
+    const wInput = div.querySelector(".metric-w");
+    wInput.addEventListener("click", e=>e.stopPropagation());
+    wInput.addEventListener("change", ()=>{
+      const val = parseFloat(wInput.value);
+      if(!Number.isFinite(val) || val < 0) return;
+      state.metricWeights = state.metricWeights || defaultMetricWeights();
+      state.metricWeights[md.id] = val / 100;
+      evaluate(); render();
+      if(typeof saveAppState === "function") saveAppState();
+    });
     body.appendChild(div);
   }
+  // Total-weight readout + reset to defaults.
+  const tot = document.createElement("div");
+  tot.className = "metric-total";
+  const custom = !!state.metricWeights;
+  tot.innerHTML = `<span>Total weight</span><b class="${Math.round(total*100)!==100?'off':''}">${Math.round(total*100)}%</b>` +
+    (custom ? `<button class="metric-w-reset" title="Reset to default weights">reset</button>` : ``);
+  const rb = tot.querySelector(".metric-w-reset");
+  if(rb) rb.addEventListener("click", ()=>{
+    state.metricWeights = null; evaluate(); render();
+    if(typeof saveAppState === "function") saveAppState();
+  });
+  body.appendChild(tot);
 }
 
 /* ------------------------------------------------------------------

@@ -14,14 +14,16 @@
 const _simResultCache = {
   ada:    null,
   egress: null,
+  fire:   null,
   noise:  null,
 };
 
 function getSimScoreContribution() {
-  let adaPenalty = 0, egressPenalty = 0, noisePenalty = 0;
+  let adaPenalty = 0, egressPenalty = 0, firePenalty = 0, noisePenalty = 0;
   const details = {
     ada:    "No ADA check run yet.",
     egress: "No egress check run yet.",
+    fire:   "No fire-safety check run yet.",
     noise:  "No noise check run yet.",
   };
 
@@ -54,6 +56,19 @@ function getSimScoreContribution() {
     details.egress = parts.length > 0 ? parts.join("; ") + "." : "Travel distance and exit capacity acceptable.";
   }
 
+  const fire = _simResultCache.fire;
+  if (fire) {
+    if (fire.count === 0) {
+      firePenalty = 5;
+      details.fire = "No fire extinguishers placed.";
+    } else if (fire.coveragePct < 60) {
+      firePenalty = Math.min(5, Math.ceil((60 - fire.coveragePct) / 12));
+      details.fire = fire.coveragePct.toFixed(1) + "% of floor within extinguisher reach (target ≥ 60%).";
+    } else {
+      details.fire = fire.coveragePct.toFixed(1) + "% of floor within extinguisher reach.";
+    }
+  }
+
   const noise = _simResultCache.noise;
   if (noise && noise.totalCells > 0) {
     const actionFrac = noise.actionCells / noise.totalCells;
@@ -66,14 +81,15 @@ function getSimScoreContribution() {
   return {
     adaPenalty,
     egressPenalty,
+    firePenalty,
     noisePenalty,
-    totalPenalty: adaPenalty + egressPenalty + noisePenalty,
+    totalPenalty: adaPenalty + egressPenalty + firePenalty + noisePenalty,
     details,
   };
 }
 
-const SIM_CANVAS_IDS   = { ada: "simCanvasAda", egress: "simCanvasEgress", noise: "simCanvasNoise" };
-const SIM_CANVAS_ZINDEX = { ada: 10, egress: 11, noise: 12 };
+const SIM_CANVAS_IDS   = { ada: "simCanvasAda", egress: "simCanvasEgress", fire: "simCanvasFire", noise: "simCanvasNoise" };
+const SIM_CANVAS_ZINDEX = { ada: 10, egress: 11, fire: 13, noise: 12 };
 const SIM_RESULTS_ID = "simResults";
 const SIM_CARD_ID    = "simResultsCard";
 
@@ -215,7 +231,7 @@ function simShowEgressResults(r) {
   const status = (!travelOk || !capacityOk || !deadEndOk) ? "fail"
     : (r.maxTravel > NFPA_MAX_TRAVEL_DISTANCE_FT * 0.75 ? "warn" : "pass");
 
-  let h = _simHeader("Egress / Fire Analysis", status);
+  let h = _simHeader("Egress Analysis", status);
   h += '<div class="sim-section">';
   h += _simRow("Occupant load estimate",  r.occupants + " persons", "");
   h += _simRow(
@@ -233,23 +249,13 @@ function simShowEgressResults(r) {
     r.deadEnd.toFixed(0) + " ft (limit: " + NFPA_MAX_DEAD_END_FT + " ft)",
     deadEndOk ? "good" : "bad"
   );
-  if(r.fireExt){
-    const pct = r.fireExt.coveragePct.toFixed(1);
-    h += _simRow(
-      "Fire extinguishers (coverage)",
-      r.fireExt.count + " unit" + (r.fireExt.count !== 1 ? "s" : "") +
-        " · " + pct + "% of stage within reach",
-      r.fireExt.count > 0 ? (r.fireExt.coveragePct >= 60 ? "good" : "warn") : "bad"
-    );
-  }
   h += '</div>';
 
   h += '<div class="sim-legend">' +
     '<span class="sim-swatch" style="background:rgba(50,140,240,0.7)"></span>Exit ' +
     '<span class="sim-swatch" style="background:rgba(55,185,55,0.55)"></span>Near ' +
     '<span class="sim-swatch" style="background:rgba(230,140,40,0.65)"></span>Mid ' +
-    '<span class="sim-swatch" style="background:rgba(220,50,50,0.65)"></span>Far/Fail ' +
-    '<span class="sim-swatch" style="background:rgba(80,220,140,0.45)"></span>Fire-ext coverage' +
+    '<span class="sim-swatch" style="background:rgba(220,50,50,0.65)"></span>Far/Fail' +
     '</div>';
 
   _simShowCard(h);
@@ -303,7 +309,7 @@ function _simRow(label, value, colorKey) {
 
 function _simSetActive(name) {
   _simActive = name;
-  ["ada", "egress", "noise"].forEach(k => {
+  ["ada", "egress", "fire", "noise"].forEach(k => {
     const btn = document.getElementById("sim" + k.charAt(0).toUpperCase() + k.slice(1) + "Btn");
     if (btn) btn.classList.toggle("sim-active", k === name);
   });
@@ -340,7 +346,7 @@ function _updatePenaltyCard() {
   const body = document.getElementById(SIM_PENALTY_BODY_ID);
   if (!card || !body) return;
 
-  const hasAny = _simResultCache.ada || _simResultCache.egress || _simResultCache.noise;
+  const hasAny = _simResultCache.ada || _simResultCache.egress || _simResultCache.fire || _simResultCache.noise;
   if (!hasAny) { card.style.display = "none"; return; }
 
   const c = getSimScoreContribution();
@@ -349,15 +355,17 @@ function _updatePenaltyCard() {
     '<div class="sim-section">' +
       _simPenRow("ADA corridor penalty",      c.adaPenalty,     5, 10) +
       _simPenRow("Egress penalty",            c.egressPenalty,  5, 10) +
+      _simPenRow("Fire safety penalty",       c.firePenalty,    3,  5) +
       _simPenRow("Noise exposure penalty",    c.noisePenalty,   3,  7) +
       '<div class="sim-row" style="border-top:1px solid var(--line);margin-top:4px;padding-top:4px">' +
         "<span><b>Total advisory penalty</b></span>" +
-        "<b>-" + c.totalPenalty + " pts (max -40)</b>" +
+        "<b>-" + c.totalPenalty + " pts (max -45)</b>" +
       "</div>" +
     "</div>" +
     '<div class="sim-section" style="font-size:11px;color:var(--text-mute);line-height:1.6">' +
       "<div>ADA: "    + _simEsc(c.details.ada)    + "</div>" +
       "<div>Egress: " + _simEsc(c.details.egress) + "</div>" +
+      "<div>Fire: "   + _simEsc(c.details.fire)   + "</div>" +
       "<div>Noise: "  + _simEsc(c.details.noise)  + "</div>" +
     "</div>" +
     '<div class="sim-disclaimer">Advisory only. Does not modify the main risk score above.</div>';
@@ -377,6 +385,7 @@ function setSimResolution(modeOrFactor){
   }
   ADA_GRID_RES_FT    = Math.max(0.05, 0.5 * factor);
   EGRESS_GRID_RES_FT = Math.max(0.10, 1.0 * factor);
+  if (typeof FIRE_GRID_RES_FT !== "undefined") FIRE_GRID_RES_FT = Math.max(0.10, 1.0 * factor);
   NOISE_GRID_RES_FT  = Math.max(0.25, 2.0 * factor);
 }
 
@@ -387,6 +396,7 @@ function setSimResolution(modeOrFactor){
 function wireSimulations() {
   simGetCanvas("ada");
   simGetCanvas("egress");
+  simGetCanvas("fire");
   simGetCanvas("noise");
   // Pick up any persisted resolution choice (loaded by loadAppState).
   if(state){
@@ -403,6 +413,7 @@ function runSingleSim(name) {
   _simShowOnlyCanvas(name);
   if (name === "ada")    runAdaCheck();
   else if (name === "egress") runEgressCheck();
+  else if (name === "fire")   runFireCheck();
   else if (name === "noise")  runNoiseCheck();
   _updatePenaltyCard();
 }
@@ -414,6 +425,7 @@ function runAllSims() {
   _runAllAccum  = "";
   runAdaCheck();
   runEgressCheck();
+  runFireCheck();
   runNoiseCheck();
   _runAllActive = false;
   const body = document.getElementById(SIM_RESULTS_ID);
@@ -444,6 +456,6 @@ function triggerLiveSim() {
   _simLiveTimer = setTimeout(() => {
     const which = state.analysisLastSim;
     if      (which === "all")    runAllSims();
-    else if (which === "ada" || which === "egress" || which === "noise") runSingleSim(which);
+    else if (which === "ada" || which === "egress" || which === "fire" || which === "noise") runSingleSim(which);
   }, 250);
 }
