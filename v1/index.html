@@ -3,30 +3,32 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Invention Studio Layout Risk Simulator</title>
-<link rel="stylesheet" href="css/theme.css">
-<link rel="stylesheet" href="css/layout.css">
-<link rel="stylesheet" href="css/components.css">
-<link rel="stylesheet" href="css/stage.css">
-<link rel="stylesheet" href="css/sim.css">
+<title>SPACE — Makerspace Layout &amp; Simulator</title>
+<link rel="stylesheet" href="css/theme.css?v=4">
+<link rel="stylesheet" href="css/layout.css?v=4">
+<link rel="stylesheet" href="css/components.css?v=4">
+<link rel="stylesheet" href="css/stage.css?v=4">
+<link rel="stylesheet" href="css/sim.css?v=4">
+<link rel="stylesheet" href="css/dashboard.css?v=4">
 </head>
 <body>
 
 <header class="app">
-  <h1><span class="accent">Invention Studio</span> Layout Risk Simulator</h1>
+  <h1><span class="accent">SPACE</span> &mdash; Makerspace Layout &amp; Simulator</h1>
   <div class="sub">Interactive prototype for evaluating safety, accessibility, congestion, and workflow risk.</div>
   <div class="meta">
-    <span><b>Project:</b> Invention Studio Layout Optimization for Safety and Accessibility</span>
-    <span><b>Lab:</b> Georgia Tech MATRIX Lab</span>
-    <span><b>Build:</b> v0.5 prototype</span>
+    <span><b>Project:</b> <span class="hdr-edit" id="piProject" contenteditable="true" spellcheck="false" title="Click to edit"></span></span>
+    <span><b>Lab:</b> <span class="hdr-edit" id="piLab" contenteditable="true" spellcheck="false" title="Click to edit"></span></span>
+    <span><b>Build:</b> <span class="hdr-edit" id="piBuild" contenteditable="true" spellcheck="false" title="Click to edit"></span></span>
   </div>
 </header>
 
-<div class="notice-banner">
+<div class="notice-banner" id="prototypeBanner">
   <span>ⓘ</span>
   <span>
-    <b>Prototype notice.</b> This simulator uses the Matterport overhead view as a visual reference. Zone labels and boundaries are preliminary and intended to test the scoring framework — they should be calibrated using on-site measurements, staff feedback, SUMS, 3DPrinterOS, and observation data. Final positions and dimensions are not exact CAD.
+    <b>Prototype notice.</b> This simulator requires an image of the floor plan as a visual reference. Zone labels and boundaries are preliminary and intended to test the scoring framework — they should be calibrated using on-site measurements, staff feedback, observational data, and recorded data.
   </span>
+  <button class="notice-close" id="prototypeBannerClose" title="Dismiss this notice">×</button>
 </div>
 
 <div class="controls">
@@ -35,53 +37,22 @@
     <button data-preset="altA">Alternative A</button>
     <button data-preset="altB">Alternative B</button>
   </div>
+  <button class="btn ghost" id="addAltBtn" title="Add a new alternative layout (a copy of the current one).">+ Add Alt</button>
+  <button class="btn ghost" id="removeAltBtn" title="Remove the currently selected alternative (Current Layout cannot be removed).">× Remove Alt</button>
 
-  <div class="ctrl">
-    <label for="trafficMode">Traffic Mode</label>
-    <select id="trafficMode">
-      <option value="summer">Summer</option>
-      <option value="normal" selected>Normal Semester</option>
-      <option value="peak">Peak Semester</option>
-    </select>
-  </div>
-
-  <div class="ctrl" title="Expands effective footprint of assembly tables and work zones to simulate chairs, users, carts, bins, and project materials.">
-    <span>Active Use Mode</span>
-    <div class="switch" id="activeUse"></div>
-  </div>
-
-  <div class="ctrl" title="Show clearance halos around movable zones.">
-    <span>Show Clearance Zones</span>
-    <div class="switch" id="showClearance"></div>
-  </div>
-
-  <div class="ctrl" title="Show emergency egress paths and connector corridor centerline.">
-    <span>Show Circulation</span>
-    <div class="switch on" id="showFlow"></div>
-  </div>
-
-  <div class="ctrl" title="Show or hide the Elements sidebar.">
-    <span>Show Sidebar</span>
-    <div class="switch on" id="showSidebar"></div>
-  </div>
-
-  <div class="sim-ctrl-group" title="Run a simulation overlay on the current layout. Requires a calibrated floor plan scale.">
-    <button class="btn ghost" id="simAdaBtn" title="ADA accessibility corridor and door check">ADA Check</button>
-    <button class="btn ghost" id="simEgressBtn" title="NFPA 101 egress travel distance and exit capacity">Egress</button>
-    <button class="btn ghost" id="simNoiseBtn" title="Monte Carlo noise map (requires dba_active on zones)">Noise</button>
-    <!-- Neil: Run All button — runs ADA, Egress, and Noise in sequence and shows all three canvas overlays simultaneously; click handler wired by sim_ui.js wireSimulations() -->
-    <button class="btn ghost" id="simRunAllBtn" title="Run ADA, Egress, and Noise in sequence. Results panel and all three canvas overlays show simultaneously.">Run All</button>
-    <!-- end Neil -->
-    <button class="btn ghost" id="simClearBtn" title="Clear the simulation overlay" disabled>Clear</button>
-  </div>
-
-  <div class="spacer"></div>
+  <!-- Force the action buttons onto their own row so the layout
+       tabs / alternatives sit alone on the first row. -->
+  <div class="controls-break"></div>
   <input type="file" id="importImageInput" accept="image/png,image/jpeg,image/jpg,image/svg+xml,image/webp,image/gif,.png,.jpg,.jpeg,.svg,.webp,.gif,.dxf,.dwg" style="display:none" />
-  <button class="btn ghost" id="importImageBtn" title="Replace the layout background image. Accepts PNG, JPG, SVG, WEBP, GIF (DXF/DWG require external conversion).">Import Floor Plan</button>
+  <button class="btn primary" id="importProjectBtn" title="Wizard: pick a floor plan + calibrate scale, then pick a project JSON (elements + positions) — one-click setup.">Import Project</button>
+  <!-- Standalone Import Floor Plan / Import Configuration buttons removed:
+       both are available inside the Import Project wizard. The hidden file
+       inputs remain because the wizard triggers them. -->
   <input type="file" id="importConfigInput" accept="application/json,.json" style="display:none" />
-  <button class="btn ghost" id="importConfigBtn" title="Load a configuration file (.json) specifying a floor plan image and pixel scale.">Import Configuration</button>
   <button class="btn ghost" id="elementBuilderBtn" title="Create custom elements with name, risk level, and default size.">Element Builder</button>
+  <button class="btn ghost" id="optimizeLayoutBtn" title="Auto-arrange the included, non-fixed elements inside a room to improve the weighted safety/quality score.">✦ Optimize Layout</button>
   <button class="btn ghost" id="resetBtn">Reset Layout</button>
+  <button class="btn ghost" id="resetDashboardBtn" title="Reset all widget positions and sizes to the default dashboard arrangement.">Reset Widgets</button>
   <button class="btn primary" id="exportBtn">Export Project</button>
 </div>
 
@@ -118,17 +89,25 @@
   </div>
 </div>
 
-<div class="app-grid" id="appGrid">
-  <!-- ============== LEFT PANEL ============== -->
-  <div class="col col-left">
-    <div class="card" style="flex:1;display:flex;flex-direction:column;min-height:0">
-      <h3>Elements <span class="pill" id="elementCountPill">0</span></h3>
-      <div class="body" style="flex:1;display:flex;flex-direction:column;min-height:0">
+<!-- Snap-to-grid dashboard. Every .card carries data-widget (its layout key
+     in state.dashboard) and data-dgroup (default left/mid/right group, used
+     by the Show Sidebar toggle). Positions are written as inline grid-column
+     / grid-row by js/dashboard.js. -->
+<div class="dashboard" id="appGrid">
+    <div class="card" id="elementsCard" data-widget="elements" data-dgroup="left">
+      <h3>
+        Elements <span class="pill" id="elementCountPill">0</span>
+        <select id="elementsSort" class="el-sort" title="Group the elements sidebar by…" style="margin-left:auto;background:var(--panel-2);color:var(--text-dim);border:1px solid var(--line);border-radius:4px;padding:2px 6px;font-size:10.5px;text-transform:none;letter-spacing:0;font-weight:500">
+          <option value="risk">By risk</option>
+          <option value="category">By category</option>
+        </select>
+      </h3>
+      <div class="body" id="elementsBody">
         <div class="elements-list" id="elementsList"></div>
       </div>
     </div>
 
-    <div class="card">
+    <div class="card" data-widget="risk" data-dgroup="left">
       <h3>Risk Summary <span class="pill" id="presetPill">Current</span></h3>
       <div class="body">
         <div class="score-row">
@@ -144,33 +123,101 @@
       </div>
     </div>
 
-    <div class="card">
+    <div class="card" data-widget="metrics" data-dgroup="left">
       <h3>Weighted Metrics</h3>
       <div class="body" id="metricsBody"></div>
     </div>
 
-    <div class="card" style="flex:1;display:flex;flex-direction:column;min-height:0">
+    <div class="card" data-widget="flags" data-dgroup="left">
       <h3>Flags &amp; Warnings <span class="pill" id="flagCountPill">0</span></h3>
-      <div class="body" style="flex:1;display:flex;flex-direction:column;min-height:0">
+      <div class="body">
         <div class="warn-list" id="warnList"></div>
       </div>
     </div>
 
-    <div class="card" id="simResultsCard" style="display:none">
+    <!-- ============== ANALYSIS SIDEBAR WIDGET ==============
+         Always-visible controls (run buttons + toggles) wired by
+         wireAnalysisPanel() in controls.js. Replaces the old toolbar
+         Analysis button + popup modal. -->
+    <div class="card" id="analysisCard" data-widget="analysis" data-dgroup="right">
+      <h3>Analysis <span class="pill" id="analysisActivePill">Idle</span></h3>
+      <div class="body">
+        <div class="an-section">
+          <div class="an-label">Run simulation</div>
+          <div class="an-btn-grid">
+            <button class="btn ghost an-run" id="simAdaBtn"    title="Corridor width + door clearance vs ADA Standards (2010). Heatmap shows fail / marginal / OK.">♿ ADA</button>
+            <button class="btn ghost an-run" id="simEgressBtn" title="Travel distance to nearest exit, occupant load + exit capacity (NFPA 101), dead-ends.">🚪 Egress</button>
+            <button class="btn ghost an-run" id="simFireBtn"   title="Fire hazard heatmap: each tool's flammability radius vs. fire-extinguisher coverage.">🧯 Fire</button>
+            <button class="btn ghost an-run" id="simNoiseBtn"  title="Inverse-square noise map (deterministic, schedule-weighted). Sources use each tool's Operating Noise. OSHA bands.">🔊 Noise</button>
+            <button class="btn ghost an-run" id="simFumesBtn"  title="Fume / odor dispersion: each tool's smell/fume radius vs. fume-hood capture.">💨 Fumes</button>
+            <button class="btn ghost an-run an-run-all" id="simAllBtn" title="Run ADA, Egress, Fire, Noise, and Fumes together; all heatmaps render at once.">⚡ Run All</button>
+          </div>
+          <button class="btn ghost an-clear" id="simClearBtn" disabled title="Clear all heatmap overlays and the results below.">Clear overlays</button>
+        </div>
+
+        <div class="an-section">
+          <div class="an-label">Options</div>
+          <div class="ctrl an-toggle" title="Re-run the last analysis automatically after every layout change.">
+            <span>Live mode</span>
+            <div class="switch" id="analysisLiveSwitch"></div>
+          </div>
+          <label class="an-field">
+            <span>Traffic mode</span>
+            <select id="analysisTrafficMode">
+              <option value="summer">Summer</option>
+              <option value="normal">Normal Semester</option>
+              <option value="peak">Peak Semester</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="an-section">
+          <div class="an-label">Heatmap resolution</div>
+          <div class="an-radios">
+            <label><input type="radio" name="simRes" value="coarse" />Coarse</label>
+            <label><input type="radio" name="simRes" value="medium" />Medium</label>
+            <label><input type="radio" name="simRes" value="fine" />Fine</label>
+          </div>
+          <div class="an-slider-row">
+            <span>finer</span>
+            <input type="range" id="simResSlider" min="0.05" max="6" step="0.05" value="1" />
+            <span>coarser</span>
+          </div>
+          <div class="an-readout" id="simResReadout"></div>
+        </div>
+
+        <div class="an-section">
+          <div class="an-label">Display overlays</div>
+          <div class="ctrl an-toggle" title="Expands effective footprint of assembly tables and work zones to simulate chairs, users, carts, bins, and project materials. Affects scoring.">
+            <span>Active Use Mode</span>
+            <div class="switch" id="activeUse"></div>
+          </div>
+        </div>
+
+        <div class="an-section">
+          <div class="an-label">Run analysis in rooms</div>
+          <div class="an-rooms" id="anRooms"></div>
+          <div class="help-text" style="margin-top:4px">Limit simulations &amp; metrics to the selected room(s). Default = all rooms. With no rooms drawn, the whole floor plan is used.</div>
+        </div>
+
+        <div class="an-note">All three simulations require a calibrated floor-plan scale (Import Project → calibrate, or Import Floor Plan and click two points).</div>
+      </div>
+    </div>
+
+    <!-- Simulation results: populated by the Analysis widget (ADA / Egress /
+         Noise / Run All). Hidden until a sim has run; cleared by "Clear
+         overlays" in the Analysis widget. -->
+    <div class="card" id="simResultsCard" data-widget="simResults" data-dgroup="right" style="display:none">
       <h3>Simulation Results</h3>
       <div class="body" id="simResults"></div>
     </div>
-    <!-- Neil: Simulation Penalty Adjustment card — hidden by default; sim_ui.js fills #simPenaltyBody and shows/hides this card after each sim run -->
-    <div class="card" id="simPenaltyCard" style="display:none">
+    <div class="card" id="simPenaltyCard" data-widget="simPenalty" data-dgroup="right" style="display:none">
       <h3>Simulation Penalty Adjustment</h3>
       <div class="body" id="simPenaltyBody"></div>
     </div>
-    <!-- end Neil -->
-  </div>
 
-  <!-- ============== MIDDLE PANEL ============== -->
-  <div class="col">
-    <div class="card stage-card" style="flex:1">
+  <!-- ============== STAGE ============== -->
+    <div class="card stage-card" data-widget="stage" data-dgroup="mid">
       <h3>
         Layout Builder
         <span class="calib-badge" id="calibBadge">Drag-to-calibrate</span>
@@ -186,7 +233,23 @@
           <span class="lg"><span class="sw" style="background:rgba(229,72,72,.55);border-color:rgba(255,90,90,.95)"></span>R5 V.High</span>
         </div>
         <div class="right">
-          <span class="muted">Drag zones · <span class="kbd">Shift</span>+drag = larger step</span>
+          <div class="ctrl stage-toggle" title="Overlay an X/Y coordinate grid on the Layout Builder for easier placement.">
+            <span>Grid</span>
+            <div class="switch" id="showGrid"></div>
+          </div>
+          <div class="ctrl stage-toggle" title="Show or hide the element name labels drawn on top of each zone.">
+            <span>Labels</span>
+            <div class="switch on" id="showLabels"></div>
+          </div>
+          <div class="ctrl stage-toggle" title="Show only each tool's footprint — hide operator / maintenance / material / kickback risk zones and the principal axis.">
+            <span>Tools Only</span>
+            <div class="switch" id="showToolsOnly"></div>
+          </div>
+          <div class="ctrl stage-toggle" title="Show or hide the Elements sidebar.">
+            <span>Sidebar</span>
+            <div class="switch on" id="showSidebar"></div>
+          </div>
+          <span class="muted">Drag · <span class="kbd">Shift</span> = larger step</span>
         </div>
       </div>
       <div class="stage-wrap">
@@ -222,12 +285,12 @@
               <div class="tp-section-lbl" id="tpSizeLbl">Size (% of stage)</div>
               <div class="tp-row">
                 <div class="tp-field">
-                  <label for="tpW">Width</label>
-                  <input type="number" id="tpW" step="0.5" min="1" max="100" />
+                  <label for="tpW">W</label>
+                  <input type="number" id="tpW" step="0.5" min="0.5" max="100" />
                 </div>
                 <div class="tp-field">
-                  <label for="tpH">Height</label>
-                  <input type="number" id="tpH" step="0.5" min="1" max="100" />
+                  <label for="tpH">H</label>
+                  <input type="number" id="tpH" step="0.5" min="0.5" max="100" />
                 </div>
               </div>
             </div>
@@ -249,18 +312,16 @@
               </div>
             </div>
             <div class="tp-btn-row">
-              <button class="btn ghost" id="tpResetSize" title="Restore default size">Reset Size</button>
               <button class="btn ghost" id="tpResetRot" title="Reset rotation to 0°">Reset Rotation</button>
+              <button class="btn primary" id="tpEditSettings" title="Open this element in the Element Builder">⚙ Edit element settings</button>
             </div>
           </div>
         </div>
       </div>
     </div>
-  </div>
 
-  <!-- ============== RIGHT PANEL ============== -->
-  <div class="col">
-    <div class="card">
+  <!-- ============== RIGHT GROUP ============== -->
+    <div class="card" data-widget="conclusion" data-dgroup="right">
       <h3>Conclusion</h3>
       <div class="body">
         <div class="concl-row">
@@ -278,7 +339,7 @@
       </div>
     </div>
 
-    <div class="card">
+    <div class="card" data-widget="topIssues" data-dgroup="right">
       <h3>Top Issues</h3>
       <div class="body">
         <div class="concl-section">
@@ -291,22 +352,6 @@
         </div>
       </div>
     </div>
-
-    <div class="card">
-      <h3>Mentor Note</h3>
-      <div class="body">
-        <div class="concl-section note">
-          <p>
-            Scoring weights and warning thresholds are <b>preliminary</b> and intended for adjustment based on staff/PI feedback, Matterport measurements, SUMS, 3DPrinterOS, and future observation data.
-          </p>
-        </div>
-        <div class="concl-section" style="margin-top:8px">
-          <h4>Method</h4>
-          <p>Two-step evaluation: <b>(1)</b> feasibility checks for overlap, egress, and corridor blockage; <b>(2)</b> weighted scoring across seven layout-quality metrics, modulated by traffic and active-use mode.</p>
-        </div>
-      </div>
-    </div>
-  </div>
 </div>
 
 <!-- ============================================================
@@ -331,8 +376,8 @@
         </div>
         <div class="chooser-card" data-choice="new-structural">
           <div class="cc-icon">▥</div>
-          <div class="cc-title">Walls / Floor Space / Doors</div>
-          <div class="cc-desc">Architectural geometry. Defines usable floor area, blocks paths, affects clearance calculations.</div>
+          <div class="cc-title">Draw Walls / Floor / Doors</div>
+          <div class="cc-desc">Open the drawing editor: click to draw walls over the floor plan; a closed contour becomes a floor space. Set each line as a normal/sound/false wall, construction-line divider, or door.</div>
         </div>
         <div class="chooser-card" data-choice="new-amenity">
           <div class="cc-icon">⛑</div>
@@ -357,6 +402,7 @@
         <button class="modal-tab" data-tab="footprint">Footprint &amp; Axis</button>
         <button class="modal-tab" data-tab="zones">Operator / Risk Zones</button>
         <button class="modal-tab" data-tab="attrs">Variable Attributes</button>
+        <button class="modal-tab" data-tab="export">Export</button>
       </div>
 
       <div class="modal-body">
@@ -373,10 +419,9 @@
             <label for="ebLabel">Name (full label)</label>
             <input type="text" id="ebLabel" placeholder="e.g. Vinyl Cutter Station" maxlength="60" />
           </div>
-          <div class="form-field">
-            <label for="ebShort">Short Label</label>
-            <input type="text" id="ebShort" placeholder="e.g. Vinyl" maxlength="20" />
-            <div class="help-text">Shown inside the zone overlay on the stage.</div>
+          <div class="form-field full">
+            <label for="ebDescription">Description (optional)</label>
+            <textarea id="ebDescription" placeholder="Notes about this tool — capabilities, materials, certifications required, etc." rows="2" maxlength="400" style="background:var(--panel-2);color:var(--text);border:1px solid var(--line);border-radius:5px;padding:6px 8px;font-size:12.5px;font-family:inherit;resize:vertical;min-height:40px"></textarea>
           </div>
           <div class="form-field">
             <label for="ebRisk">Display Risk Level</label>
@@ -400,23 +445,18 @@
             </select>
             <div class="help-text">Used by future tool-risk overlays and adjacency rules.</div>
           </div>
-          <div class="form-field">
-            <label for="ebW">Bounding Width (<span class="eb-unit" id="ebWUnit">% of stage</span>)</label>
-            <input type="number" id="ebW" min="0.1" step="0.5" value="8" />
+          <div class="form-field full" id="ebSizeReadout" style="background:var(--panel-2);border:1px solid var(--line);border-radius:5px;padding:6px 8px;font-size:11.5px;color:var(--text-dim)">
+            Footprint dimensions are derived from the shapes you add on the
+            <b>Footprint &amp; Axis</b> tab. Current size:
+            <b id="ebSizeReadoutValue" style="color:var(--text);font-family:ui-monospace,monospace">—</b>
           </div>
-          <div class="form-field">
-            <label for="ebH">Bounding Height (<span class="eb-unit" id="ebHUnit">% of stage</span>)</label>
-            <input type="number" id="ebH" min="0.1" step="0.5" value="6" />
-          </div>
-          <div class="form-field">
-            <label for="ebCat">Category (optional)</label>
-            <select id="ebCat">
-              <option value="">— Default —</option>
-              <option value="fixed">Fixed reference</option>
-              <option value="exit">Exit</option>
-              <option value="corridor">Corridor</option>
-              <option value="open">Open Area</option>
-            </select>
+          <div class="form-field full">
+            <label>Tool Group / Category</label>
+            <div id="ebCategoryPicker" class="eb-cat-picker"></div>
+            <div class="help-text">Pick an existing group or add a new one with its own color. Used for sidebar grouping and stage swatches.</div>
+            <!-- legacy hidden field so any older code that still reads ebCat
+                 by id receives the chosen categoryId without crashing -->
+            <input type="hidden" id="ebCat" value="" />
           </div>
           <div class="form-field">
             <label for="ebBeginner">Beginner-Friendly?</label>
@@ -475,8 +515,9 @@
               <div style="font-size:11px;letter-spacing:.4px;text-transform:uppercase;color:var(--text-mute);font-weight:600;flex:1">Shapes</div>
             </div>
             <div class="shape-row-headers">
-              <div>Type</div><div>X / Cx</div><div>Y / Cy</div><div>W / R</div><div>H</div><div></div>
+              <div>Type</div><div>Cx · centered</div><div>Cy · centered</div><div>W / R</div><div>H</div><div></div>
             </div>
+            <div class="help-text" style="margin:2px 0 6px">Cx/Cy place the shape's center relative to the element's center (0,0 = middle).</div>
             <div class="shape-list" id="ebShapeList"></div>
             <button class="add-shape-btn" id="ebAddShape">+ Add shape</button>
 
@@ -531,60 +572,40 @@
         <div class="rz-block" id="rzOperator">
           <div class="rz-hdr">
             <span class="rz-swatch" style="background:rgba(58,167,118,.85)"></span>
-            <span class="rz-title">Operator Footprint</span>
-            <select class="rz-type" data-zone="operator">
-              <option value="none">None</option>
-              <option value="radius">Radius</option>
-              <option value="shape">Rectangle</option>
-              <option value="vector">Vector (along axis)</option>
-            </select>
+            <span class="rz-title">Operator Footprints</span>
+            <button type="button" class="btn ghost rz-add" data-zone="operator">+ Add</button>
           </div>
-          <div class="rz-help">Where the operator stands during normal use — usually in front of the principal axis.</div>
+          <div class="rz-help">Where the operator stands during normal use. Add one entry per stance/position.</div>
           <div class="rz-params" data-zone-params="operator"></div>
         </div>
 
         <div class="rz-block" id="rzMaintenance">
           <div class="rz-hdr">
             <span class="rz-swatch" style="background:rgba(122,160,255,.85)"></span>
-            <span class="rz-title">Maintenance Footprint</span>
-            <select class="rz-type" data-zone="maintenance">
-              <option value="none">None</option>
-              <option value="radius">Radius</option>
-              <option value="shape">Rectangle</option>
-              <option value="vector">Vector (along axis)</option>
-            </select>
+            <span class="rz-title">Maintenance Footprints</span>
+            <button type="button" class="btn ghost rz-add" data-zone="maintenance">+ Add</button>
           </div>
-          <div class="rz-help">Clearance required to access filters, panels, replace consumables, etc.</div>
+          <div class="rz-help">Clearance to access filters, panels, replace consumables. Add one per access side.</div>
           <div class="rz-params" data-zone-params="maintenance"></div>
         </div>
 
         <div class="rz-block" id="rzKickback">
           <div class="rz-hdr">
             <span class="rz-swatch" style="background:#ff5e6e"></span>
-            <span class="rz-title">Kickback / Risk-of-Injury Vector</span>
-            <select class="rz-type" data-zone="kickback">
-              <option value="none">None</option>
-              <option value="radius">Radius (omnidirectional risk)</option>
-              <option value="shape">Rectangle</option>
-              <option value="vector">Vector (directional)</option>
-            </select>
+            <span class="rz-title">Kickback / Risk-of-Injury Vectors</span>
+            <button type="button" class="btn ghost rz-add" data-zone="kickback">+ Add</button>
           </div>
-          <div class="rz-help">Path injury hazards could travel — e.g. wood kickback from a table saw, hot sparks from a grinder.</div>
+          <div class="rz-help">Paths injury hazards could travel — wood kickback, hot sparks. Add one cone per direction.</div>
           <div class="rz-params" data-zone-params="kickback"></div>
         </div>
 
         <div class="rz-block" id="rzMaterial">
           <div class="rz-hdr">
             <span class="rz-swatch" style="background:#e8a83b"></span>
-            <span class="rz-title">Material Loading / Queuing Vector</span>
-            <select class="rz-type" data-zone="material">
-              <option value="none">None</option>
-              <option value="radius">Radius</option>
-              <option value="shape">Rectangle</option>
-              <option value="vector">Vector (along axis)</option>
-            </select>
+            <span class="rz-title">Material Loading / Queuing Footprints</span>
+            <button type="button" class="btn ghost rz-add" data-zone="material">+ Add</button>
           </div>
-          <div class="rz-help">Clearance needed to feed stock in or stage materials (e.g. long stock for a horizontal bandsaw).</div>
+          <div class="rz-help">Bounded clearance area to feed stock in or stage materials — offset it toward the loading side. Rotates with the tool like the operator/maintenance footprints.</div>
           <div class="rz-params" data-zone-params="material"></div>
         </div>
           </div>
@@ -632,9 +653,14 @@
             <div class="va-help">How often the tool needs cleaning, calibration, or filter changes.</div>
           </div>
           <div class="va-field">
-            <label for="ebNoise">Noise (dB)</label>
+            <label for="ebNoise">Operating Noise (dBA at 1 m)</label>
             <input type="number" id="ebNoise" min="0" max="140" step="1" value="60" />
-            <div class="va-help">Approximate sound pressure at 1 m during operation. 85+ dB requires hearing protection.</div>
+            <div class="va-help">Sound pressure at 1 m while running. Also drives the Noise simulation (≤ ambient = silent / not a source). 85+ dB needs hearing protection.</div>
+          </div>
+          <div class="va-field">
+            <label for="ebSchedProb">Schedule probability (0–1)</label>
+            <input type="number" id="ebSchedProb" min="0" max="1" step="0.05" placeholder="e.g. 0.5" />
+            <div class="va-help">Fraction of time the tool is actually running. Weights the tool's contribution in the noise simulation.</div>
           </div>
           <div class="va-field">
             <label for="ebSmell">Smell / Fumes</label>
@@ -648,9 +674,50 @@
             <div class="va-help">Drives ventilation and isolation requirements.</div>
           </div>
         </div>
+
+        <div style="margin-top:14px;padding-top:10px;border-top:1px solid var(--line)">
+          <div style="font-size:11px;letter-spacing:.4px;text-transform:uppercase;color:var(--text-mute);font-weight:600;margin-bottom:8px">Required PPE / Safety Practices</div>
+          <p class="help-text" style="margin-top:0">Personal protective equipment and mandatory practices for using this element. Feeds the safety scoring — higher-risk elements with nothing specified are flagged.</p>
+          <div class="ppe-grid" id="ebPpeGrid">
+            <label class="ppe-chip ppe-chip-none"><input type="checkbox" class="eb-ppe-cb" data-ppe="none"><span>✅ No PPE required</span></label>
+            <label class="ppe-chip"><input type="checkbox" class="eb-ppe-cb" data-ppe="eye"><span>👓 Eye protection</span></label>
+            <label class="ppe-chip"><input type="checkbox" class="eb-ppe-cb" data-ppe="hearing"><span>🎧 Hearing protection</span></label>
+            <label class="ppe-chip"><input type="checkbox" class="eb-ppe-cb" data-ppe="gloves"><span>🧤 Gloves</span></label>
+            <label class="ppe-chip"><input type="checkbox" class="eb-ppe-cb" data-ppe="respirator"><span>😷 Respirator / dust mask</span></label>
+            <label class="ppe-chip"><input type="checkbox" class="eb-ppe-cb" data-ppe="faceshield"><span>🛡 Face shield</span></label>
+            <label class="ppe-chip"><input type="checkbox" class="eb-ppe-cb" data-ppe="closedtoe"><span>🥾 Closed-toe shoes</span></label>
+            <label class="ppe-chip"><input type="checkbox" class="eb-ppe-cb" data-ppe="apron"><span>🦺 Apron / lab coat</span></label>
+            <label class="ppe-chip"><input type="checkbox" class="eb-ppe-cb" data-ppe="noLoose"><span>🚫 No loose clothing/hair</span></label>
+            <label class="ppe-chip"><input type="checkbox" class="eb-ppe-cb" data-ppe="training"><span>🎓 Training / certification</span></label>
+          </div>
+          <div class="form-field full" style="margin-top:8px">
+            <label for="ebSafetyPractices">Other required safety practices (optional)</label>
+            <textarea id="ebSafetyPractices" rows="2" maxlength="400" placeholder="e.g. buddy system required, machine guard must be in place, no work without staff present" style="background:var(--panel-2);color:var(--text);border:1px solid var(--line);border-radius:5px;padding:6px 8px;font-size:12.5px;font-family:inherit;resize:vertical;min-height:38px"></textarea>
+          </div>
+        </div>
+
       </div>
 
-      <!-- TAB 5 REMOVED — existing-list now lives on the chooser screen -->
+      <!-- TAB 5: EXPORT — download just this element as a tiny
+           elements-bundle JSON that can be re-imported elsewhere. -->
+      <div class="tab-panel" data-tab="export">
+        <div class="help-text" style="margin-bottom:10px">
+          Save the current element to a standalone JSON file. Re-import it from any other project via
+          <b>Element Builder &rarr; Import elements file</b>.
+        </div>
+        <div class="form-field full">
+          <label for="ebExportFilename">Filename</label>
+          <input type="text" id="ebExportFilename" placeholder="my-element.json" maxlength="80" />
+        </div>
+        <div class="form-field full" style="margin-top:8px">
+          <label>Preview</label>
+          <pre id="ebExportPreview" style="background:var(--panel-2);border:1px solid var(--line);border-radius:5px;padding:8px;font-size:11px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;max-height:240px;overflow:auto;white-space:pre-wrap;word-break:break-word;color:var(--text-dim);margin:0">—</pre>
+        </div>
+        <div class="tp-btn-row" style="margin-top:10px;gap:6px">
+          <button type="button" class="btn primary" id="ebExportDownload">⬇ Download element JSON</button>
+          <button type="button" class="btn ghost"   id="ebExportCopy">Copy to clipboard</button>
+        </div>
+      </div>
     </div>
     </div><!-- /screenTool -->
 
@@ -680,6 +747,11 @@
           <div class="form-field" id="sbDoorSwingField" style="display:none">
             <label for="sbDoorSwing">Door swing direction (deg)</label>
             <input type="number" id="sbDoorSwing" min="-180" max="180" step="15" value="90" />
+          </div>
+          <div class="form-field">
+            <label for="sbStcOverride">Sound transmission (STC, optional)</label>
+            <input type="number" id="sbStcOverride" min="0" max="80" step="1" placeholder="default 35" />
+            <div class="help-text">Insertion loss the noise simulator applies per crossing of this wall/door. Leave blank to use the global default (35).</div>
           </div>
         </div>
 
@@ -721,13 +793,24 @@
             <input type="text" id="amLabel" placeholder="e.g. Eye-Wash by Welding Bay" maxlength="60" />
           </div>
           <div class="form-field">
-            <label for="amSize">Marker size (<span class="eb-unit" id="amSizeUnit">% of stage</span>)</label>
-            <input type="number" id="amSize" min="0.1" step="0.5" value="3" />
+            <label for="amWidth">Width (<span class="eb-unit" id="amWidthUnit">% of stage</span>)</label>
+            <input type="number" id="amWidth" min="0.1" step="0.5" value="2" />
+          </div>
+          <div class="form-field">
+            <label for="amHeight">Height (<span class="eb-unit" id="amHeightUnit">% of stage</span>)</label>
+            <input type="number" id="amHeight" min="0.1" step="0.5" value="2" />
           </div>
           <div class="form-field">
             <label for="amCoverage">Coverage radius (<span class="eb-unit" id="amCoverageUnit">% of stage</span>)</label>
             <input type="number" id="amCoverage" min="0" step="0.5" value="15" />
             <div class="help-text" id="amCoverageHelp">Distance this amenity is effective within.</div>
+          </div>
+          <div class="form-field full" id="amBagField" style="display:none">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+              <input type="checkbox" id="amHasBag" />
+              <span>Includes liner / bag</span>
+            </label>
+            <div class="help-text">Whether this trash can has a removable liner. Affects waste-flow / janitorial analyses.</div>
           </div>
         </div>
       </div>
@@ -737,6 +820,40 @@
       <button class="btn ghost" id="ebBack" style="display:none">← Back to chooser</button>
       <button class="btn ghost" id="ebCancel">Close</button>
       <button class="btn primary" id="ebSave" style="display:none">Add Element</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     IMPORT PROJECT WIZARD
+     Two-step chooser: floor plan + calibration, then the project file.
+     ============================================================ -->
+<div class="modal-backdrop" id="projectImportBackdrop">
+  <div class="modal wide" role="dialog" aria-labelledby="piTitle">
+    <div class="modal-hdr">
+      <h2 id="piTitle">Import Project</h2>
+      <span class="mh-sub">Set up a project in two steps</span>
+      <button class="mh-close" id="piClose" title="Close">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="chooser-section-hdr">Steps</div>
+      <div class="chooser-grid">
+        <div class="chooser-card" data-pi-step="floor-plan">
+          <div class="cc-icon">🗺️</div>
+          <div class="cc-title">1. Floor Plan & Scale</div>
+          <div class="cc-desc">Pick a floor plan image (PNG, JPG, SVG, etc.) and calibrate the real-world scale by clicking two reference points.</div>
+          <div class="cc-status" id="piStatusFloorPlan">Not started</div>
+        </div>
+        <div class="chooser-card" data-pi-step="project-file">
+          <div class="cc-icon">📦</div>
+          <div class="cc-title">2. Project File</div>
+          <div class="cc-desc">Pick a project JSON containing element definitions and their positions. Elements come in as editable.</div>
+          <div class="cc-status" id="piStatusProject">Not started</div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-ftr">
+      <button class="btn primary" id="piDone">Done</button>
     </div>
   </div>
 </div>
@@ -785,16 +902,107 @@
 
 
 
-<script src="js/data.js"></script>
-<script src="js/state.js"></script>
-<script src="js/scoring.js"></script>
-<script src="js/render.js"></script>
-<script src="js/modals.js"></script>
-<script src="js/controls.js"></script>
-<script src="js/sim_ada.js"></script>
-<script src="js/sim_egress.js"></script>
-<script src="js/sim_noise.js"></script>
-<script src="js/sim_ui.js"></script>
-<script src="js/init.js"></script>
+<!-- ============================================================
+     WALL / FLOOR PLAN DRAWING EDITOR
+     Draw walls (polylines) over the floor plan; a closed contour
+     becomes a floor space. Wired by wireWallDraw() in walldraw.js.
+     ============================================================ -->
+<div class="modal-backdrop" id="wallDrawBackdrop">
+  <div class="modal wd-modal" role="dialog" aria-labelledby="wdTitle">
+    <div class="modal-hdr">
+      <h2 id="wdTitle">Draw Walls &amp; Floor Plan</h2>
+      <span class="mh-sub">Click to place wall points · click the first point (or “Close room”) to enclose a floor space</span>
+      <button class="mh-close" id="wdClose" title="Close">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="wd-toolbar">
+        <div class="wd-modes" id="wdModes">
+          <button type="button" data-wmode="draw" class="active" title="Draw walls / lines by clicking points">✏ Draw</button>
+          <button type="button" data-wmode="select" title="Select &amp; move existing walls, doors, and rooms">⤢ Select</button>
+          <button type="button" data-wmode="connect" title="Click two walls to join their nearest ends (also: Ctrl/⌘-click two walls in Select mode)">🔗 Connect</button>
+        </div>
+        <div class="wd-types" id="wdTypes" title="Line type for drawing">
+          <button type="button" data-wtype="wall" class="active">Wall</button>
+          <button type="button" data-wtype="sound">Sound wall</button>
+          <button type="button" data-wtype="false">False wall</button>
+          <button type="button" data-wtype="construction">Construction line</button>
+        </div>
+        <div class="wd-doors" id="wdDoors" title="Place a door swing symbol, then click on the plan">
+          <button type="button" class="wd-door-btn" data-door="quarter" title="Single door — 90° swing">
+            <svg viewBox="0 0 100 100" aria-hidden="true"><path d="M0,100 L0,0 A100,100 0 0 1 100,100 Z"/></svg>
+          </button>
+          <button type="button" class="wd-door-btn" data-door="semicircle" title="Door — 180° semicircle swing">
+            <svg viewBox="0 0 100 100" aria-hidden="true"><path d="M0,100 A50,50 0 0 1 100,100 Z"/></svg>
+          </button>
+          <button type="button" class="wd-door-btn" data-door="double" title="Double door — two leaves">
+            <svg viewBox="0 0 100 100" aria-hidden="true"><path d="M0,100 L0,50 A50,50 0 0 1 50,100 Z"/><path d="M100,100 L100,50 A50,50 0 0 0 50,100 Z"/></svg>
+          </button>
+          <button type="button" class="wd-door-btn" data-door="sliding" title="Sliding door">
+            <svg viewBox="0 0 100 100" aria-hidden="true"><rect x="6" y="40" width="88" height="20"/></svg>
+          </button>
+          <label class="wd-doorsize" title="Size for new doors">
+            <span>Size</span>
+            <input type="number" id="wdDoorSize" min="0.5" step="0.5" />
+            <span class="wd-doorsize-unit" id="wdDoorSizeUnit">%</span>
+          </label>
+        </div>
+        <div class="wd-actions">
+          <button type="button" class="btn ghost" id="wdGenerate" title="Detect walls &amp; floor space from the loaded floor-plan image.">✨ Generate from image</button>
+          <span class="wd-gen-opts" title="Tell the generator which colors are the walls vs background. Uncheck Auto to use these exactly.">
+            <label class="wd-gen-opt">Walls <input type="color" id="wdGenWallColor" value="#000000"></label>
+            <label class="wd-gen-opt">Bg <input type="color" id="wdGenBgColor" value="#ffffff"></label>
+            <label class="wd-gen-opt"><input type="checkbox" id="wdGenAuto" checked> Auto</label>
+            <label class="wd-gen-opt" title="Walls shorter than this are ignored. Lower it to capture small walls.">Min wall <input type="number" id="wdGenMinLen" min="0.1" step="0.5"><span class="wd-gen-unit" id="wdGenMinUnit">%</span></label>
+          </span>
+          <button type="button" class="btn ghost" id="wdCloseRoom" title="Close the current chain into a floor space">⬡ Close room</button>
+          <button type="button" class="btn ghost" id="wdNewChain" title="Start a new, disconnected wall chain">↳ New chain</button>
+          <button type="button" class="btn ghost" id="wdUndo" title="Undo the last point">↶ Undo</button>
+          <button type="button" class="btn ghost" id="wdDeleteSel" title="Delete the selected item (Select mode)" style="display:none">🗑 Delete</button>
+          <button type="button" class="btn ghost" id="wdClear" title="Clear everything">Clear all</button>
+          <label class="wd-snap" title="Snap points to a grid"><input type="checkbox" id="wdSnap" checked> Snap</label>
+        </div>
+      </div>
+      <div class="wd-main">
+        <div class="cal-canvas-wrap wd-canvas-wrap" id="wdCanvasWrap">
+          <img id="wdImage" class="cal-canvas" alt="Floor plan" />
+          <svg id="wdOverlay" class="cal-svg wd-overlay" viewBox="0 0 100 100" preserveAspectRatio="none"></svg>
+        </div>
+        <div class="wd-side">
+          <div class="wd-status" id="wdStatus">Click on the plan to place the first wall point.</div>
+          <div class="wd-list" id="wdList"></div>
+          <div class="wd-legend-hdr">Key — click a swatch to recolor (applies to new lines)</div>
+          <div class="wd-legend" id="wdLegend"></div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-ftr">
+      <button class="btn ghost" id="wdCancel">Cancel</button>
+      <button class="btn primary" id="wdSave">Save Floor Plan</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/data.js?v=4"></script>
+<script src="js/state.js?v=4"></script>
+<script src="js/scoring.js?v=4"></script>
+<script src="js/render.js?v=4"></script>
+<script src="js/modals.js?v=4"></script>
+<script src="js/controls.js?v=4"></script>
+<!-- Simulation modules (ADA, Egress, Noise) and their shared UI bridge.
+     Modules load before init.js so wireSimulations() can run at boot. -->
+<script src="js/sim_ada.js?v=4"></script>
+<script src="js/sim_egress.js?v=4"></script>
+<script src="js/sim_fire.js?v=4"></script>
+<script src="js/sim_noise.js?v=4"></script>
+<script src="js/sim_fumes.js?v=4"></script>
+<script src="js/sim_ui.js?v=4"></script>
+<!-- Snap-to-grid dashboard: must load before init.js so initDashboard()
+     can place the widgets at boot. -->
+<script src="js/dashboard.js?v=4"></script>
+<!-- Wall / floor-plan drawing editor (replaces the shape-based structural builder). -->
+<script src="js/walldraw.js?v=4"></script>
+<!-- Optimize Layout (constrained simulated annealing). -->
+<script src="js/optimize.js?v=4"></script>
+<script src="js/init.js?v=4"></script>
 </body>
 </html>

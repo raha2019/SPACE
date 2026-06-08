@@ -27,17 +27,22 @@ const OSHA_PEL_DBA = 90;
 // large indoor space with HVAC and no power tools running.
 const NOISE_AMBIENT_DBA = 40;
 
-// Grid resolution (feet). 2 ft balances spatial detail with the
-// computational cost of 500-iteration Monte Carlo on a 40x25 grid.
-const NOISE_GRID_RES_FT = 2;
+// Grid resolution (feet). Adjusted at runtime by setSimResolution().
+let NOISE_GRID_RES_FT = 2;
 
 // Number of Monte Carlo trials. At 500 iterations the mean dB
 // stabilizes to within ~0.5 dB standard error for schedule_prob >= 0.2.
 const NOISE_MC_ITERATIONS = 500;
 
-// Minimum source-to-receiver distance in the inverse-square-law
-// calculation. Prevents log(0) and approximates near-field behavior.
-const NOISE_MIN_DIST_FT = 1.0;
+// Reference distance d1 for the inverse-square law. dba_active is measured
+// at 1 m (per the Element Builder field), so L2 = L1 - 20*log10(d2/d1) with
+// d1 = 1 m expressed in the active calibration unit. Distances below d1 are
+// clamped to d1 so the model never reports a level above the source.
+function _noiseRefDist(){
+  return (typeof convertUnits === "function")
+    ? convertUnits(1, "m", (typeof currentUnit === "function" ? currentUnit() : "ft"))
+    : 3.280839895; // 1 m in feet
+}
 
 // Sound transmission class of typical interior makerspace partitions
 // (metal stud + drywall, no special acoustic treatment). The insertion
@@ -58,8 +63,14 @@ function _noiseGetSources(stageW, stageH) {
   for (const def of allZoneDefs()) {
     const z = state.zones[def.id];
     if (!z || !z.included) continue;
-    const dba  = def.dba_active    !== undefined ? def.dba_active    : NOISE_DEFAULT_SOURCE_DBA;
-    const prob = def.schedule_prob !== undefined ? def.schedule_prob : NOISE_DEFAULT_SCHEDULE_PROB;
+    // Operating dBA: prefer the explicit dba_active, then the "Operating
+    // Noise" variable attribute (noiseDb). Imported tools carry noiseDb but
+    // often no top-level dba_active, so without this fallback only
+    // builder-made tools were treated as sources.
+    const dba = Number.isFinite(def.dba_active) ? def.dba_active
+              : (def.variableAttrs && Number.isFinite(def.variableAttrs.noiseDb)) ? def.variableAttrs.noiseDb
+              : NOISE_DEFAULT_SOURCE_DBA;
+    const prob = Number.isFinite(def.schedule_prob) ? def.schedule_prob : NOISE_DEFAULT_SCHEDULE_PROB;
     if (dba <= NOISE_AMBIENT_DBA) continue; // not a meaningful emitter
     // Center of zone in feet from the stage origin.
     const cx = ((z.x + z.w / 2) / 100) * stageW;
@@ -69,65 +80,91 @@ function _noiseGetSources(stageW, stageH) {
   return sources;
 }
 
-function _noiseBuildWallGrid(stageW, stageH, cols, rows) {
-  const wallGrid = new Uint8Array(cols * rows);
+/* Per-cell STC grid. A cell's value is the STC of the wall/door element
+   covering it (0 if no obstacle). Walls and doors both attenuate sound;
+   doors with a stcOverride field use that value instead of the global
+   default. This lets the user mark a "noise barrier" by upping STC. */
+function _noiseBuildStcGrid(stageW, stageH, cols, rows) {
+  const stcGrid = new Float32Array(cols * rows);
   for (const el of state.structuralElements) {
     const cat = el.cat || "";
-    if (cat !== "structural-wall" && cat !== "wall") continue;
+    // Recognize both legacy cat-tagged walls/doors AND the new draw-editor
+    // elements (elementClass:"structural" + subtype). Construction-line
+    // dividers and floor areas do not attenuate sound.
+    const isWall = (cat === "structural-wall" || cat === "wall") ||
+                   (el.elementClass === "structural" && el.subtype === "wall");
+    const isDoor = (cat === "structural-door" || cat === "door") ||
+                   (el.elementClass === "structural" && el.subtype === "door");
+    if (!isWall && !isDoor) continue;
     const z = state.zones[el.id];
     if (!z || !z.included) continue;
+    // Drawn elements carry their STC in el.stc (e.g. sound wall = 52);
+    // legacy elements use stcOverride; otherwise fall back to the default.
+    const stc = Number.isFinite(el.stc) ? el.stc
+              : Number.isFinite(el.stcOverride) ? el.stcOverride
+              : NOISE_WALL_STC;
+    if (stc <= 0) continue;
     const c1 = Math.floor((z.x / 100) * stageW / NOISE_GRID_RES_FT);
     const r1 = Math.floor((z.y / 100) * stageH / NOISE_GRID_RES_FT);
     const c2 = Math.ceil(((z.x + z.w) / 100) * stageW / NOISE_GRID_RES_FT);
     const r2 = Math.ceil(((z.y + z.h) / 100) * stageH / NOISE_GRID_RES_FT);
     for (let r = Math.max(0, r1); r < Math.min(rows, r2); r++) {
       for (let c = Math.max(0, c1); c < Math.min(cols, c2); c++) {
-        wallGrid[r * cols + c] = 1;
+        // Use the strongest STC if cells overlap (e.g. a wall passing
+        // through a door frame — pick whichever blocks more sound).
+        const i = r * cols + c;
+        if (stc > stcGrid[i]) stcGrid[i] = stc;
       }
     }
   }
-  return wallGrid;
+  return stcGrid;
 }
 
-// Count wall crossings on the straight-line path from (c1,r1) to (c2,r2)
-// using Bresenham's line algorithm. Each crossing adds NOISE_WALL_STC * 0.5 dB
-// of attenuation. Wall detection is approximate for non-axis-aligned paths.
-function _noiseWallCrossings(wallGrid, cols, rows, c1, r1, c2, r2) {
+// Walk the Bresenham line from (c1,r1) to (c2,r2) and SUM the STC value
+// of every wall/door cell along the way. Cells with stcGrid[i] === 0 are
+// free space. The returned value is fed into the inverse-square calc as
+// totalStc * 0.5 dB of insertion loss.
+function _noiseWallCrossings(stcGrid, cols, rows, c1, r1, c2, r2) {
   let x = c1, y = r1;
   const dx = Math.abs(c2 - c1), dy = Math.abs(r2 - r1);
   const sx = c1 < c2 ? 1 : -1, sy = r1 < r2 ? 1 : -1;
   let err = dx - dy;
-  let crossings = 0;
+  let totalStc = 0;
   while (true) {
     if ((x !== c1 || y !== r1) && (x !== c2 || y !== r2)) {
       const i = y * cols + x;
-      if (i >= 0 && i < wallGrid.length && wallGrid[i]) crossings++;
+      if (i >= 0 && i < stcGrid.length) totalStc += stcGrid[i];
     }
     if (x === c2 && y === r2) break;
     const e2 = 2 * err;
     if (e2 > -dy) { err -= dy; x += sx; }
     if (e2 <  dx) { err += dx; y += sy; }
   }
-  return crossings;
+  return totalStc;
 }
 
 // Precompute received dB at each grid cell for each source (walls
 // fixed between iterations). This separates the deterministic geometry
 // from the stochastic scheduling, so the Monte Carlo loop is cheap.
-function _noisePrecompute(sources, wallGrid, cols, rows, stageW, stageH) {
+function _noisePrecompute(sources, stcGrid, cols, rows, stageW, stageH) {
+  const refDist = _noiseRefDist();   // d1 = 1 m in the active unit
   return sources.map(src => {
     const srcC = Math.round(src.cx / NOISE_GRID_RES_FT);
     const srcR = Math.round(src.cy / NOISE_GRID_RES_FT);
     const cell = new Float32Array(cols * rows);
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
-        const distFt = Math.max(
-          NOISE_MIN_DIST_FT,
+        const dist = Math.max(
+          refDist,
           Math.hypot(c - srcC, r - srcR) * NOISE_GRID_RES_FT
         );
-        const directDb   = src.dba - 20 * Math.log10(distFt);
-        const crossings  = _noiseWallCrossings(wallGrid, cols, rows, srcC, srcR, c, r);
-        cell[r * cols + c] = directDb - crossings * NOISE_WALL_STC * 0.5;
+        // Inverse-square law: L2 = L1 - 20*log10(d2/d1). 6 dB per doubling
+        // of distance (NOT 6 dB per fixed step).
+        const directDb = src.dba - 20 * Math.log10(dist / refDist);
+        // Sum of STC values for every wall/door cell crossed. Per-element
+        // stcOverride lets the user customize attenuation per barrier.
+        const stcSum = _noiseWallCrossings(stcGrid, cols, rows, srcC, srcR, c, r);
+        cell[r * cols + c] = directDb - stcSum * 0.5;
       }
     }
     return cell;
@@ -137,8 +174,10 @@ function _noisePrecompute(sources, wallGrid, cols, rows, stageW, stageH) {
 function _noisePaintCanvas(ctx, meanDb, cols, rows, canvasW, canvasH) {
   const cellW = canvasW / cols;
   const cellH = canvasH / rows;
+  const scoped = (typeof roomScopeActive === "function") && roomScopeActive();
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
+      if (scoped && !pointInAnalysisScope((c+0.5)/cols*100, (r+0.5)/rows*100)) continue;
       const d = meanDb[r * cols + c];
       if (d >= OSHA_PEL_DBA) {
         ctx.fillStyle = "rgba(220,45,45,0.65)";    // exceeds PEL
@@ -173,26 +212,28 @@ function runNoiseCheck() {
     return;
   }
 
-  const wallGrid    = _noiseBuildWallGrid(stageW, stageH, cols, rows);
-  const precomputed = _noisePrecompute(sources, wallGrid, cols, rows, stageW, stageH);
+  const stcGrid     = _noiseBuildStcGrid(stageW, stageH, cols, rows);
+  const precomputed = _noisePrecompute(sources, stcGrid, cols, rows, stageW, stageH);
 
-  // Accumulate linear pressure squared over all MC iterations.
+  // Deterministic expected sound energy. A machine is simply on or off, so
+  // rather than Monte-Carlo sampling on/off, we sum each source's energy
+  // weighted by its schedule probability (= the closed-form mean the MC was
+  // approximating). prob defaults to 1 (treated as "on").
   const accumulator = new Float64Array(cols * rows);
-  for (let iter = 0; iter < NOISE_MC_ITERATIONS; iter++) {
-    for (let si = 0; si < sources.length; si++) {
-      if (Math.random() > sources[si].prob) continue;
-      const cell = precomputed[si];
-      for (let i = 0; i < accumulator.length; i++) {
-        accumulator[i] += Math.pow(10, cell[i] / 10);
-      }
+  for (let si = 0; si < sources.length; si++) {
+    const w = Number.isFinite(sources[si].prob) ? sources[si].prob : 1;
+    if (w <= 0) continue;
+    const cell = precomputed[si];
+    for (let i = 0; i < accumulator.length; i++) {
+      accumulator[i] += w * Math.pow(10, cell[i] / 10);
     }
   }
 
-  // Convert to mean dB (ambient floor prevents log of zero).
+  // Convert to dB (ambient floor prevents log of zero).
   const ambientLinear = Math.pow(10, NOISE_AMBIENT_DBA / 10);
   const meanDb = new Float32Array(cols * rows);
   for (let i = 0; i < accumulator.length; i++) {
-    meanDb[i] = 10 * Math.log10(accumulator[i] / NOISE_MC_ITERATIONS + ambientLinear);
+    meanDb[i] = 10 * Math.log10(accumulator[i] + ambientLinear);
   }
 
   const canvas = simGetCanvas("noise");

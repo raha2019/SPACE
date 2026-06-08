@@ -1,57 +1,29 @@
-# BUGS.md
+# SPACE — Bug Tracker
 
-Bugs identified and fixed in the SPACE v1 codebase.
+Running log of known bugs and their status. Newest issues at the top of each section.
+For future features and improvements, see [IDEAS.md](IDEAS.md).
 
----
+## Open
 
-## Bug 1: saveCustomElement calls nonexistent DOM node
+| # | Area | Bug | Detail | Severity |
+|---|------|-----|--------|----------|
+| 3 | Sims (ADA) | Builder-made **doors never get a width check** | `_adaCheckDoorWidths` ([v1/js/sim_ada.js](v1/js/sim_ada.js)) keys door detection off `def.cat`. Builder/drawn doors have `subtype:"door"` and no `cat`, so the door-width check never fires. (Blocking is now fixed via `blocksMovement`; the width *check* still needs subtype-aware detection.) | Medium |
+| 4 | Sims (egress) | Builder-made **doors blocked; exits unreachable via builder** | `_egressIsBlocking` / `_egressBuildGrid` ([v1/js/sim_egress.js](v1/js/sim_egress.js)) classify exits/doors/floors by `cat`. Builder doors (`subtype:"door"`) are treated as obstacles, and there is no builder path to create an `cat:"exit"` zone, so exits exist only via imported bundles. | High |
 
-**Description:** After saving or deleting a custom tool element, the UI list inside the
-Element Builder modal was not refreshed. The modal continued to show stale entries.
+**Root cause shared by #3–#4:** the sim modules were written against a `cat`-based data model (`"structural-wall"`, `"exit"`, etc.) used by imported default bundles, while the Element Builder / wall editor use `elementClass` + `subtype`. Movement-blocking (ADA/egress) and noise attenuation now reconcile both (via `blocksMovement` and subtype checks); still outstanding: the ADA **door-width check** (#3) and a builder/draw path to create **exit** zones (#4). A shared `isWall`/`isDoor`/`isExit(def)` helper would finish the job.
 
-**Root cause:** `saveCustomElement()` (modals.js line 695) and `deleteCustomElement()`
-(modals.js line 756) both called `renderCustomElementList()`. That function queries
-`document.getElementById("ebCustomList")`, but no element with that ID exists in
-index.html. The function returned immediately every time. The correct ID is
-`chooserExistingList`, maintained by `renderChooserExisting()`.
+## Fixed
 
-**Fix applied:** Replaced both calls to `renderCustomElementList()` with
-`renderChooserExisting()`, which correctly targets `#chooserExistingList`.
-
-**Files changed:** `v1/js/modals.js`
-
----
-
-## Bug 2: drawRiskZone ignores offsetX / offsetY for shape-type zones
-
-**Description:** Shape-type risk zone overlays (SVG rect inside a composite zone)
-appeared in the wrong position on the stage when the user had set a positional offset
-in the Element Builder.
-
-**Root cause:** `drawRiskZone()` in render.js only checked `if(zone.offset)`, where
-`offset` is a legacy scalar API from the old builder. The current builder saves
-`offsetX` and `offsetY` as separate numeric fields. Zones built with the current
-builder always had `offset === undefined`, so the translate transform was never applied.
-
-**Fix applied:** Updated the shape-type branch to detect all three cases:
-- new API: `zone.offsetX` / `zone.offsetY` used directly
-- legacy API: scalar `zone.offset` projected along `axisAngle` to get `dx`/`dy`
-- no offset: no transform applied
-
-**Files changed:** `v1/js/render.js`
-
----
-
-## Bug 3: Structural shape delete button uses literal "x" instead of times entity
-
-**Description:** Delete buttons on structural shape rows inside the Element Builder
-displayed a plain lowercase "x" rather than the multiplication sign used elsewhere
-in the UI.
-
-**Root cause:** The innerHTML string for structural shape rows (modals.js lines 818
-and 829) used the literal character `x` in the button label. Tool builder delete
-buttons correctly used the HTML entity `&times;` (renders as x).
-
-**Fix applied:** Changed both structural delete button labels from `x` to `&times;`.
-
-**Files changed:** `v1/js/modals.js`
+| # | Area | Bug | Fix | Date |
+|---|------|-----|-----|------|
+| 14 | Sims (fire) | **Fire sim froze / crashed the app** | The path-based BFS allocated a grid sized to the stage in feet; a small calibrated px-per-unit makes the stage thousands of feet → millions of cells + per-cell loops → hang. Reverted to a simple, **hard-capped** radius model ([v1/js/sim_fire.js](v1/js/sim_fire.js)): each tool projects a flammability hazard radius, each extinguisher a coverage radius (mitigates up to 75%); grid capped at 140×140 so it can't run away. Also made the noise sim **deterministic** (schedule-weighted expected energy instead of a 500-iteration Monte Carlo) and added a new **Fumes** dispersion sim. | 2026-06-07 |
+| 13 | Scoring / metrics | **Weighted metrics all read 0.0/5 on custom layouts** | `computeMetrics` was hard-coded to the built-in layout's zone ids; on a custom/imported layout `rect(undefined)` returns a far-off degenerate rect, and the flexibility section did `Z["asm1"].x` → threw → metrics stayed `{}` → every metric rendered 0. Added a **generic, robust metrics path** (`_computeMetricsGeneric`) driven by element geometry/risk/doors/rooms/vector-conflicts, gated the legacy named-zone rules behind `_isDefaultLayout`, and added generic flags (door blockage, kickback/material→operator). Verified: real 0–5 values + score on a custom layout. ([v1/js/scoring.js](v1/js/scoring.js)) | 2026-06-07 |
+| 12 | Import | **Re-imported project dumped all elements top-left, lost rotation** | `loadPreset`'s "snapshot outgoing preset" step copied the (0,0) placeholder zones over the freshly-imported preset before reading them; also structural/amenity defs were routed into `customElements`. Fixed by clearing `state.zones` before `loadPreset` in `applyProject`, routing defs to the correct collection in `applyElementsBundle`, and re-rendering after load ([v1/js/controls.js](v1/js/controls.js)). Export was already complete (coords+rotation). | 2026-06-07 |
+| 2 | Sims (noise) | Builder/drawn **walls didn't attenuate noise** | `_noiseBuildStcGrid` ([v1/js/sim_noise.js](v1/js/sim_noise.js)) now recognizes walls/doors by `elementClass:"structural"` + `subtype` (not just `cat`) and reads each element's `stc` (drawn walls) / `stcOverride` / default. Construction lines and floors correctly don't attenuate. | 2026-06-06 |
+| 10 | Sims (noise) | **Wrong reference distance in dB-drop formula** | Propagation used `L − 20·log10(d)` with d₁ implicitly 1 in the calibration unit, but `dba_active` is measured at **1 m**. Now `L₂ = L₁ − 20·log10(d₂/d₁)` with `d₁` = 1 m converted to the active unit ([`_noiseRefDist`](v1/js/sim_noise.js)); distances clamp to d₁ so levels never exceed the source. (Correct physics is **6 dB per distance doubling**, ≈ from 1 m→2 m, not 6 dB per 1.5 ft.) | 2026-06-06 |
+| 9 | Scoring | **Stale flags persisted when a scoring rule threw** | `_evaluateBody` only assigned `state.flags` at its end, so a mid-body exception (sparse/partial layouts hit a rule that reads an absent zone's `.label`) left the previous run's flags lingering. `evaluate()` now resets `state.flags = []` at the start of every run ([v1/js/scoring.js](v1/js/scoring.js)). | 2026-06-06 |
+| 8 | Element dimensions / units | **Element sizes didn't convert when the unit changed** | An element made in meters (e.g. 1.35 × 1.32) still read 1.35 × 1.32 after recalibrating to feet instead of converting. `refitElementsToScale` ([v1/js/state.js](v1/js/state.js)) fed `def.wReal`/`hReal` into `unitsToPct` while ignoring the `def.realUnit` they were stored under. Added a `convertUnits()` helper and made the refit convert real dims from `def.realUnit` into the current unit (then re-stamp `realUnit`), preserving the real-world footprint. Verified: 1.35 m → 4.43 ft. | 2026-06-05 |
+| 7 | Scale calibration | **Click marker offset vertically from the clicked point** | Clicks were measured against the `<img>` box, but the SVG overlay was sized to the wrapper. For images taller than the wrapper's `max-height:60vh` clamp the two diverged, throwing markers off (−446px in the worst case). Made the image *fit* the box ([v1/css/components.css](v1/css/components.css)) and added `syncCalOverlay()` ([v1/js/modals.js](v1/js/modals.js)) to size/position the overlay to exactly cover the rendered image; also ignore clicks in the letterbox margin. Verified: marker within <1px of the click even on a tall image. | 2026-06-05 |
+| 6 | Elements sidebar | **Categories could not be reordered** (drag-and-drop "did nothing") | Added reliable up/down arrow buttons to each category header in category-sort mode ([v1/js/controls.js](v1/js/controls.js)), swapping the entry in `state.categories` (which drives both sidebar order and stage z-index). Drag-and-drop retained and hardened with a `dragenter` `preventDefault` so the drop registers across browsers. | 2026-06-05 |
+| 5 | Layout | **Elements widget not resizable** | Original intent was wrong (whole-column width resize wasn't wanted). Retired the column-width divider (`.col-resizer{display:none}`, grid back to 3 columns, `wireLeftColResizer()` no-op) and made the **Elements card body** vertically resizable like the other widget cards — removed its `flex:1`, gave it a 300px default height with `resize:vertical` + scroll ([v1/index.html](v1/index.html), [v1/css/components.css](v1/css/components.css), [v1/css/layout.css](v1/css/layout.css)). See [IDEAS.md](IDEAS.md) D1 for the full draggable-dashboard follow-up. | 2026-06-05 |
+| 1 | Sims + render | **Structural floor element blocked heatmap analysis** and drew a solid fill over it | Floor is a non-physical area label, not a solid object. (a) `_adaIsBlocking` / `_egressIsBlocking` now return `false` for `elementClass==="structural" && subtype==="floor"`, so floors are walkable in the grids. (b) New CSS rule `.zone.struct-floor .composite-svg .fp { fill:transparent }` ([v1/css/stage.css](v1/css/stage.css)) renders the floor as a dashed bordered region with its label, letting overlays/elements show through. | 2026-06-05 |

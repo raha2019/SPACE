@@ -34,9 +34,8 @@ const NFPA_MAX_COMMON_PATH_FT = 75;
 // NFPA 101 (2021), 7.5.1.8: maximum dead-end corridor length (feet).
 const NFPA_MAX_DEAD_END_FT = 20;
 
-// BFS grid resolution (feet). 1 ft gives adequate travel-distance
-// precision without excessive memory on typical makerspace scales.
-const EGRESS_GRID_RES_FT = 1.0;
+// BFS grid resolution (feet). Adjusted at runtime by setSimResolution().
+let EGRESS_GRID_RES_FT = 1.0;
 
 // Zone IDs that are always traversable for egress purposes.
 const EGRESS_PASSABLE_IDS = new Set([
@@ -46,6 +45,13 @@ const EGRESS_PASSABLE_IDS = new Set([
 function _egressIsBlocking(def) {
   if (!def) return false;
   if (EGRESS_PASSABLE_IDS.has(def.id)) return false;
+  // Explicit per-element flag from the wall-draw editor wins: walls block,
+  // construction-line dividers / doors / floors do not.
+  if (typeof def.blocksMovement === "boolean") return def.blocksMovement;
+  // Structural FLOOR elements are non-physical area labels, not solid
+  // objects — they mark a named region but never obstruct egress. Treat
+  // them as walkable space.
+  if (def.elementClass === "structural" && def.subtype === "floor") return false;
   const cat = def.cat || "";
   if (cat === "exit" || cat === "structural-floor" || cat === "structural-door") return false;
   if (cat === "structural-wall" || cat === "wall") return true;
@@ -64,16 +70,18 @@ function _egressBuildGrid(stageW, stageH) {
     const isBlocking = _egressIsBlocking(def);
     const val = isExit ? 2 : (isBlocking ? 1 : 0);
     if (val === 0) continue;
-    const c1 = Math.floor((z.x / 100) * stageW / EGRESS_GRID_RES_FT);
-    const r1 = Math.floor((z.y / 100) * stageH / EGRESS_GRID_RES_FT);
-    const c2 = Math.ceil(((z.x + z.w) / 100) * stageW / EGRESS_GRID_RES_FT);
-    const r2 = Math.ceil(((z.y + z.h) / 100) * stageH / EGRESS_GRID_RES_FT);
-    for (let r = Math.max(0, r1); r < Math.min(rows, r2); r++) {
-      for (let c = Math.max(0, c1); c < Math.min(cols, c2); c++) {
+    // Rotation-aware footprint; add operator footprint under Active Use mode.
+    const inclOp = !isExit && !!(state.activeUse && z.activeUse);
+    const { test, aabb } = simBlockerFootprint(def, z, stageW, stageH, inclOp);
+    const c1 = Math.max(0, Math.floor(aabb.x1 / EGRESS_GRID_RES_FT));
+    const r1 = Math.max(0, Math.floor(aabb.y1 / EGRESS_GRID_RES_FT));
+    const c2 = Math.min(cols, Math.ceil(aabb.x2 / EGRESS_GRID_RES_FT));
+    const r2 = Math.min(rows, Math.ceil(aabb.y2 / EGRESS_GRID_RES_FT));
+    for (let r = r1; r < r2; r++) {
+      for (let c = c1; c < c2; c++) {
+        if (!test((c + 0.5) * EGRESS_GRID_RES_FT, (r + 0.5) * EGRESS_GRID_RES_FT)) continue;
         // Exit value (2) overrides obstacle value (1) so exits stay passable.
-        if (val === 2 || grid[r * cols + c] !== 2) {
-          grid[r * cols + c] = val;
-        }
+        if (val === 2 || grid[r * cols + c] !== 2) grid[r * cols + c] = val;
       }
     }
   }
@@ -103,7 +111,14 @@ function _egressBFS(grid, cols, rows) {
 }
 
 function _egressOccupantLoad(stageW, stageH) {
-  return Math.ceil((stageW * stageH) / NFPA_OCCUPANT_LOAD_FACTOR_MAKERSPACE);
+  // Use the analysis-scope room area when rooms are selected, otherwise the
+  // whole stage. This stops empty/outside floor area from inflating the load.
+  let area = stageW * stageH;
+  if (typeof analysisScopeAreaUnits === "function") {
+    const a = analysisScopeAreaUnits();
+    if (Number.isFinite(a) && a > 0) area = a;
+  }
+  return Math.ceil(area / NFPA_OCCUPANT_LOAD_FACTOR_MAKERSPACE);
 }
 
 function _egressExitCapacity(stageW) {
@@ -142,12 +157,16 @@ function _egressMaxDeadEnd(dist, grid, cols, rows) {
   return maxLen;
 }
 
+/* Fire-extinguisher coverage moved to its own simulation (sim_fire.js). */
+
 function _egressPaintCanvas(ctx, dist, grid, cols, rows, canvasW, canvasH) {
   const cellW = canvasW / cols;
   const cellH = canvasH / rows;
   const mid = NFPA_MAX_TRAVEL_DISTANCE_FT * 0.5;
+  const scoped = (typeof roomScopeActive === "function") && roomScopeActive();
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
+      if (scoped && !pointInAnalysisScope((c+0.5)/cols*100, (r+0.5)/rows*100)) continue;
       const i = r * cols + c;
       const d = dist[i];
       if (grid[i] === 1) continue; // wall: leave transparent
@@ -195,6 +214,7 @@ function runEgressCheck() {
   ctx.clearRect(0, 0, cw, ch);
   _egressPaintCanvas(ctx, dist, grid, cols, rows, cw, ch);
 
-  simShowEgressResults({ occupants, exitCap, maxTravel, deadEnd });
-  if (typeof _simResultCache !== "undefined") _simResultCache.egress = { occupants, exitCap, maxTravel, deadEnd };
+  const result = { occupants, exitCap, maxTravel, deadEnd };
+  simShowEgressResults(result);
+  if (typeof _simResultCache !== "undefined") _simResultCache.egress = result;
 }

@@ -37,10 +37,9 @@ const ADA_MIN_CORRIDOR_WIDTH_IN = 36;
 // circulation paths in facilities with equipment carts and mobility aids.
 const ADA_MIN_PRIMARY_CORRIDOR_IN = 44;
 
-// Grid resolution for the occupancy grid (feet).
-// 0.5 ft = 6 inches: fine enough to distinguish the 32-in vs 36-in
-// thresholds without excessive memory on a typical 80 x 50 ft space.
-const ADA_GRID_RES_FT = 0.5;
+// Grid resolution for the occupancy grid (feet). Adjusted at runtime by
+// setSimResolution() — coarser values run faster but lose precision.
+let ADA_GRID_RES_FT = 0.5;
 
 // Zone IDs that are always traversable even if their category would
 // otherwise mark them as obstacles (dedicated circulation areas).
@@ -51,6 +50,13 @@ const ADA_PASSABLE_IDS = new Set([
 function _adaIsBlocking(def) {
   if (!def) return false;
   if (ADA_PASSABLE_IDS.has(def.id)) return false;
+  // Explicit per-element flag set by the wall-draw editor wins: walls block,
+  // construction-line dividers / doors / floors do not.
+  if (typeof def.blocksMovement === "boolean") return def.blocksMovement;
+  // Structural FLOOR elements are non-physical area labels (a bordered
+  // region with a name), not solid objects. They never block circulation,
+  // so the distance transform must treat them as open space.
+  if (def.elementClass === "structural" && def.subtype === "floor") return false;
   const cat = def.cat || "";
   // Structural doors, floor areas, and exit zones are openings.
   if (cat === "exit" || cat === "structural-floor" || cat === "structural-door") return false;
@@ -68,13 +74,17 @@ function _adaBuildGrid(stageW, stageH) {
     const z = state.zones[def.id];
     if (!z || !z.included) continue;
     if (!_adaIsBlocking(def)) continue;
-    const c1 = Math.floor((z.x / 100) * stageW / ADA_GRID_RES_FT);
-    const r1 = Math.floor((z.y / 100) * stageH / ADA_GRID_RES_FT);
-    const c2 = Math.ceil(((z.x + z.w) / 100) * stageW / ADA_GRID_RES_FT);
-    const r2 = Math.ceil(((z.y + z.h) / 100) * stageH / ADA_GRID_RES_FT);
-    for (let r = Math.max(0, r1); r < Math.min(rows, r2); r++) {
-      for (let c = Math.max(0, c1); c < Math.min(cols, c2); c++) {
-        grid[r * cols + c] = 1;
+    // Rotation-aware footprint; add the operator footprint when Active Use
+    // mode is on and this tool's active-use toggle is on.
+    const inclOp = !!(state.activeUse && z.activeUse);
+    const { test, aabb } = simBlockerFootprint(def, z, stageW, stageH, inclOp);
+    const c1 = Math.max(0, Math.floor(aabb.x1 / ADA_GRID_RES_FT));
+    const r1 = Math.max(0, Math.floor(aabb.y1 / ADA_GRID_RES_FT));
+    const c2 = Math.min(cols, Math.ceil(aabb.x2 / ADA_GRID_RES_FT));
+    const r2 = Math.min(rows, Math.ceil(aabb.y2 / ADA_GRID_RES_FT));
+    for (let r = r1; r < r2; r++) {
+      for (let c = c1; c < c2; c++) {
+        if (test((c + 0.5) * ADA_GRID_RES_FT, (r + 0.5) * ADA_GRID_RES_FT)) grid[r * cols + c] = 1;
       }
     }
   }
@@ -150,8 +160,10 @@ function _adaPaintCanvas(ctx, dist, cols, rows, canvasW, canvasH) {
   const cellH = canvasH / rows;
   const minCells  = Math.ceil((ADA_MIN_CORRIDOR_WIDTH_IN  / 12) / ADA_GRID_RES_FT / 2);
   const prefCells = Math.ceil((ADA_MIN_PRIMARY_CORRIDOR_IN / 12) / ADA_GRID_RES_FT / 2);
+  const scoped = (typeof roomScopeActive === "function") && roomScopeActive();
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
+      if (scoped && !pointInAnalysisScope((c+0.5)/cols*100, (r+0.5)/rows*100)) continue;
       const d = dist[r * cols + c];
       if (d <= 0) continue;
       if (d < minCells)       ctx.fillStyle = "rgba(220,55,55,0.55)";

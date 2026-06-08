@@ -14,15 +14,19 @@
 const _simResultCache = {
   ada:    null,
   egress: null,
+  fire:   null,
   noise:  null,
+  fumes:  null,
 };
 
 function getSimScoreContribution() {
-  let adaPenalty = 0, egressPenalty = 0, noisePenalty = 0;
+  let adaPenalty = 0, egressPenalty = 0, firePenalty = 0, noisePenalty = 0, fumesPenalty = 0;
   const details = {
     ada:    "No ADA check run yet.",
     egress: "No egress check run yet.",
+    fire:   "No fire-safety check run yet.",
     noise:  "No noise check run yet.",
+    fumes:  "No fumes check run yet.",
   };
 
   const ada = _simResultCache.ada;
@@ -54,6 +58,20 @@ function getSimScoreContribution() {
     details.egress = parts.length > 0 ? parts.join("; ") + "." : "Travel distance and exit capacity acceptable.";
   }
 
+  const fire = _simResultCache.fire;
+  if (fire) {
+    if (fire.count === 0) {
+      firePenalty = 5;
+      details.fire = "No fire extinguishers placed — every tool is at risk.";
+    } else if (fire.beyond > 0 && fire.tools > 0) {
+      firePenalty = Math.min(5, Math.ceil((fire.beyond / fire.tools) * 5));
+      const w = fire.worst && Number.isFinite(fire.worst.d) ? ` (farthest: ${fire.worst.label} ~${fire.worst.d.toFixed(0)} ${fire.unit})` : "";
+      details.fire = `${fire.beyond} of ${fire.tools} tools are a long walk from an extinguisher${w}.`;
+    } else {
+      details.fire = "All tools have quick walking access to an extinguisher.";
+    }
+  }
+
   const noise = _simResultCache.noise;
   if (noise && noise.totalCells > 0) {
     const actionFrac = noise.actionCells / noise.totalCells;
@@ -63,17 +81,32 @@ function getSimScoreContribution() {
                     (pelFrac * 100).toFixed(1) + "% above PEL.";
   }
 
+  const fumes = _simResultCache.fumes;
+  if (fumes) {
+    if (fumes.sources === 0) {
+      details.fumes = "No fume / odor sources.";
+    } else if (fumes.uncovered > 0) {
+      fumesPenalty = Math.min(8, Math.ceil((fumes.uncovered / fumes.sources) * 8));
+      details.fumes = `${fumes.uncovered} of ${fumes.sources} fume source(s) lack hood capture` +
+        (fumes.worst ? ` (worst: ${fumes.worst.label})` : "") + ".";
+    } else {
+      details.fumes = "All fume sources have hood capture nearby.";
+    }
+  }
+
   return {
     adaPenalty,
     egressPenalty,
+    firePenalty,
     noisePenalty,
-    totalPenalty: adaPenalty + egressPenalty + noisePenalty,
+    fumesPenalty,
+    totalPenalty: adaPenalty + egressPenalty + firePenalty + noisePenalty + fumesPenalty,
     details,
   };
 }
 
-const SIM_CANVAS_IDS   = { ada: "simCanvasAda", egress: "simCanvasEgress", noise: "simCanvasNoise" };
-const SIM_CANVAS_ZINDEX = { ada: 10, egress: 11, noise: 12 };
+const SIM_CANVAS_IDS   = { ada: "simCanvasAda", egress: "simCanvasEgress", fire: "simCanvasFire", noise: "simCanvasNoise", fumes: "simCanvasFumes" };
+const SIM_CANVAS_ZINDEX = { ada: 10, egress: 11, fire: 13, noise: 12, fumes: 14 };
 const SIM_RESULTS_ID = "simResults";
 const SIM_CARD_ID    = "simResultsCard";
 
@@ -215,7 +248,7 @@ function simShowEgressResults(r) {
   const status = (!travelOk || !capacityOk || !deadEndOk) ? "fail"
     : (r.maxTravel > NFPA_MAX_TRAVEL_DISTANCE_FT * 0.75 ? "warn" : "pass");
 
-  let h = _simHeader("Egress / Fire Analysis", status);
+  let h = _simHeader("Egress Analysis", status);
   h += '<div class="sim-section">';
   h += _simRow("Occupant load estimate",  r.occupants + " persons", "");
   h += _simRow(
@@ -293,7 +326,7 @@ function _simRow(label, value, colorKey) {
 
 function _simSetActive(name) {
   _simActive = name;
-  ["ada", "egress", "noise"].forEach(k => {
+  ["ada", "egress", "fire", "noise"].forEach(k => {
     const btn = document.getElementById("sim" + k.charAt(0).toUpperCase() + k.slice(1) + "Btn");
     if (btn) btn.classList.toggle("sim-active", k === name);
   });
@@ -330,7 +363,7 @@ function _updatePenaltyCard() {
   const body = document.getElementById(SIM_PENALTY_BODY_ID);
   if (!card || !body) return;
 
-  const hasAny = _simResultCache.ada || _simResultCache.egress || _simResultCache.noise;
+  const hasAny = _simResultCache.ada || _simResultCache.egress || _simResultCache.fire || _simResultCache.noise || _simResultCache.fumes;
   if (!hasAny) { card.style.display = "none"; return; }
 
   const c = getSimScoreContribution();
@@ -339,97 +372,112 @@ function _updatePenaltyCard() {
     '<div class="sim-section">' +
       _simPenRow("ADA corridor penalty",      c.adaPenalty,     5, 10) +
       _simPenRow("Egress penalty",            c.egressPenalty,  5, 10) +
+      _simPenRow("Fire safety penalty",       c.firePenalty,    3,  5) +
       _simPenRow("Noise exposure penalty",    c.noisePenalty,   3,  7) +
+      _simPenRow("Fume exposure penalty",     c.fumesPenalty,   3,  6) +
       '<div class="sim-row" style="border-top:1px solid var(--line);margin-top:4px;padding-top:4px">' +
         "<span><b>Total advisory penalty</b></span>" +
-        "<b>-" + c.totalPenalty + " pts (max -40)</b>" +
+        "<b>-" + c.totalPenalty + " pts (max -53)</b>" +
       "</div>" +
     "</div>" +
     '<div class="sim-section" style="font-size:11px;color:var(--text-mute);line-height:1.6">' +
       "<div>ADA: "    + _simEsc(c.details.ada)    + "</div>" +
       "<div>Egress: " + _simEsc(c.details.egress) + "</div>" +
+      "<div>Fire: "   + _simEsc(c.details.fire)   + "</div>" +
       "<div>Noise: "  + _simEsc(c.details.noise)  + "</div>" +
+      "<div>Fumes: "  + _simEsc(c.details.fumes)  + "</div>" +
     "</div>" +
     '<div class="sim-disclaimer">Advisory only. Does not modify the main risk score above.</div>';
 }
 
+/* Adjust the grid resolution of every sim from the Analysis modal.
+   Accepts either a named preset ("coarse" | "medium" | "fine") or a
+   numeric multiplier — small = finer/slower, large = coarser/faster. */
+function setSimResolution(modeOrFactor){
+  let factor;
+  if(typeof modeOrFactor === "number" && isFinite(modeOrFactor) && modeOrFactor > 0){
+    factor = modeOrFactor;
+  } else {
+    factor = modeOrFactor === "coarse" ? 2
+           : modeOrFactor === "fine"   ? 0.5
+           : 1;
+  }
+  ADA_GRID_RES_FT    = Math.max(0.05, 0.5 * factor);
+  EGRESS_GRID_RES_FT = Math.max(0.10, 1.0 * factor);
+  if (typeof FIRE_GRID_RES_FT !== "undefined") FIRE_GRID_RES_FT = Math.max(0.10, 1.0 * factor);
+  NOISE_GRID_RES_FT  = Math.max(0.25, 2.0 * factor);
+}
+
+/* In v1 the three sims are invoked from the Analysis modal cards (not
+   from toolbar buttons). The helpers below are what those cards call.
+   wireSimulations() just makes sure the canvas overlays exist in the
+   DOM ahead of the first render so styles attach cleanly. */
 function wireSimulations() {
-  // Ensure all three canvases exist in DOM before first render (hidden by default).
   simGetCanvas("ada");
   simGetCanvas("egress");
+  simGetCanvas("fire");
   simGetCanvas("noise");
-
-  const adaBtn    = document.getElementById("simAdaBtn");
-  const egressBtn = document.getElementById("simEgressBtn");
-  const noiseBtn  = document.getElementById("simNoiseBtn");
-  const clearBtn  = document.getElementById("simClearBtn");
-  const runAllBtn = document.getElementById("simRunAllBtn");
-
-  if (adaBtn) {
-    adaBtn.addEventListener("click", () => {
-      _simSetActive("ada");
-      if (runAllBtn) runAllBtn.classList.remove("sim-active");
-      _simShowOnlyCanvas("ada");
-      runAdaCheck();
-      _updatePenaltyCard();
-    });
+  simGetCanvas("fumes");
+  // Pick up any persisted resolution choice (loaded by loadAppState).
+  if(state){
+    if(Number.isFinite(state.simResolutionFactor) && state.simResolutionFactor > 0){
+      setSimResolution(state.simResolutionFactor);
+    } else if(state.simResolution){
+      setSimResolution(state.simResolution);
+    }
   }
-  if (egressBtn) {
-    egressBtn.addEventListener("click", () => {
-      _simSetActive("egress");
-      if (runAllBtn) runAllBtn.classList.remove("sim-active");
-      _simShowOnlyCanvas("egress");
-      runEgressCheck();
-      _updatePenaltyCard();
-    });
-  }
-  if (noiseBtn) {
-    noiseBtn.addEventListener("click", () => {
-      _simSetActive("noise");
-      if (runAllBtn) runAllBtn.classList.remove("sim-active");
-      _simShowOnlyCanvas("noise");
-      runNoiseCheck();
-      _updatePenaltyCard();
-    });
-  }
-  if (runAllBtn) {
-    runAllBtn.addEventListener("click", () => {
-      // Deactivate individual sim buttons; Run All highlights itself.
-      _simSetActive(null);
-      runAllBtn.classList.add("sim-active");
+}
 
-      // Accumulate all three results into one panel.
-      _runAllActive = true;
-      _runAllAccum  = "";
-      runAdaCheck();
-      runEgressCheck();
-      runNoiseCheck();
-      _runAllActive = false;
+function runSingleSim(name) {
+  _simSetActive(name);
+  _simShowOnlyCanvas(name);
+  if (name === "ada")    runAdaCheck();
+  else if (name === "egress") runEgressCheck();
+  else if (name === "fire")   runFireCheck();
+  else if (name === "noise")  runNoiseCheck();
+  else if (name === "fumes")  runFumesCheck();
+  _updatePenaltyCard();
+}
 
-      // Commit combined HTML to the results panel.
-      const body = document.getElementById(SIM_RESULTS_ID);
-      const card = document.getElementById(SIM_CARD_ID);
-      if (body) body.innerHTML = _runAllAccum;
-      if (card) card.style.display = "";
+function runAllSims() {
+  _simSetActive(null);
+  // Accumulate all three sims' HTML, then commit in one shot.
+  _runAllActive = true;
+  _runAllAccum  = "";
+  runAdaCheck();
+  runEgressCheck();
+  runFireCheck();
+  runNoiseCheck();
+  runFumesCheck();
+  _runAllActive = false;
+  const body = document.getElementById(SIM_RESULTS_ID);
+  const card = document.getElementById(SIM_CARD_ID);
+  if (body) body.innerHTML = _runAllAccum;
+  if (card) card.style.display = "";
+  _simShowAllCanvases();
+  _updatePenaltyCard();
+}
 
-      // Show all three canvas overlays simultaneously.
-      _simShowAllCanvases();
+function clearSimOverlays() {
+  _simHideAllCanvases();
+  _simSetActive(null);
+  const card = document.getElementById(SIM_CARD_ID);
+  if (card) card.style.display = "none";
+  const penCard = document.getElementById(SIM_PENALTY_CARD_ID);
+  if (penCard) penCard.style.display = "none";
+}
 
-      // Enable Clear since we just ran sims.
-      if (clearBtn) clearBtn.disabled = false;
-      _updatePenaltyCard();
-    });
-  }
-  if (clearBtn) {
-    clearBtn.disabled = true;
-    clearBtn.addEventListener("click", () => {
-      _simHideAllCanvases();
-      _simSetActive(null);
-      if (runAllBtn) runAllBtn.classList.remove("sim-active");
-      const card = document.getElementById(SIM_CARD_ID);
-      if (card) card.style.display = "none";
-      const penCard = document.getElementById(SIM_PENALTY_CARD_ID);
-      if (penCard) penCard.style.display = "none";
-    });
-  }
+/* Live mode hook — called from the end of render() with debouncing so
+   drags don't fire one analysis per pointermove. When the user toggles
+   "Live mode" in the Analysis modal, this re-runs the last analysis
+   ~250ms after the layout stops changing. */
+let _simLiveTimer = null;
+function triggerLiveSim() {
+  if (!state || !state.analysisLive || !state.analysisLastSim) return;
+  if (_simLiveTimer) clearTimeout(_simLiveTimer);
+  _simLiveTimer = setTimeout(() => {
+    const which = state.analysisLastSim;
+    if      (which === "all")    runAllSims();
+    else if (which === "ada" || which === "egress" || which === "fire" || which === "noise" || which === "fumes") runSingleSim(which);
+  }, 250);
 }

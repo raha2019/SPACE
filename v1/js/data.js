@@ -24,9 +24,9 @@ const RISK_TAGS = { 0:"—", 1:"Low", 2:"Mod", 3:"Mod-Hi", 4:"High", 5:"V.High" 
        the contents in place (Object.assign after deleting old keys).
    ------------------------------------------------------------------ */
 const PRESETS = {
-  current: { name: "Empty",       zones: {} },
-  altA:    { name: "Empty Alt A", zones: {} },
-  altB:    { name: "Empty Alt B", zones: {} },
+  current: { name: "Current Configuration", zones: {} },
+  altA:    { name: "Alternative A",          zones: {} },
+  altB:    { name: "Alternative B",          zones: {} },
 };
 
 /* ------------------------------------------------------------------

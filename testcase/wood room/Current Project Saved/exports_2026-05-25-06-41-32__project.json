@@ -1,0 +1,94 @@
+{
+  "kind": "project",
+  "name": "Invention Studio Project",
+  "generatedAt": "2026-05-25T06:41:32.150Z",
+  "floorPlan": {
+    "width": 537,
+    "height": 417,
+    "filename": "wood_room.png"
+  },
+  "scale": {
+    "pixels": 12.558888240500423,
+    "realLength": 1,
+    "unit": "ft"
+  },
+  "elementDefs": [
+    {
+      "id": "struct_wood_room_area",
+      "label": "Wood Room Area",
+      "short": "Wood Room ",
+      "risk": 0,
+      "w": 60,
+      "h": 49.5,
+      "elementClass": "structural",
+      "subtype": "floor",
+      "shapes": [
+        {
+          "type": "rect",
+          "x": 0,
+          "y": 0,
+          "w": 100,
+          "h": 100
+        }
+      ],
+      "countWalls": false,
+      "doorSwing": 90,
+      "unionAreaPct": 2970
+    },
+    {
+      "id": "struct_cnc_space",
+      "label": "CNC Space",
+      "short": "CNC Space",
+      "risk": 0,
+      "fixed": true,
+      "w": 60,
+      "h": 10,
+      "elementClass": "structural",
+      "subtype": "wall",
+      "shapes": [
+        {
+          "type": "rect",
+          "x": 0,
+          "y": 0,
+          "w": 100,
+          "h": 100
+        }
+      ],
+      "countWalls": false,
+      "doorSwing": 90,
+      "unionAreaPct": 600
+    },
+    {
+      "id": "amenity_fire_extinguisher",
+      "label": "Fire Extinguisher",
+      "short": "FX",
+      "risk": 0,
+      "w": 3,
+      "h": 3,
+      "elementClass": "amenity",
+      "subtype": "fire_extinguisher",
+      "coverage": 12,
+      "icon": "FX"
+    }
+  ],
+  "zones": {
+    "struct_wood_room_area": {
+      "x": 2.869,
+      "y": 6.043,
+      "w": 70.161,
+      "h": 90.352
+    },
+    "struct_cnc_space": {
+      "x": 73.367,
+      "y": 5.882,
+      "w": 24.556,
+      "h": 46.682
+    },
+    "amenity_fire_extinguisher": {
+      "x": 48.008,
+      "y": 92.094,
+      "w": 3,
+      "h": 3
+    }
+  }
+}

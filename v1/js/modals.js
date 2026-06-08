@@ -11,7 +11,10 @@ let calState = null; // {payload, pt1, pt2, recalibrate}
 
 function openCalibrationModal(payload, recalibrate){
   calState = { payload, pt1:null, pt2:null, recalibrate: !!recalibrate };
-  document.getElementById("calImage").src = payload.dataUrl;
+  const calImg = document.getElementById("calImage");
+  // Once the image lays out we can size the SVG overlay to exactly match it.
+  calImg.onload = () => { syncCalOverlay(); drawCalOverlay(); };
+  calImg.src = payload.dataUrl;
   document.getElementById("calOverlay").innerHTML = "";
   document.getElementById("calConfirm").disabled = true;
   document.getElementById("calStatus").innerHTML = "Click <b>point 1</b> on the image.";
@@ -29,6 +32,24 @@ function closeCalibrationModal(){
   calState = null;
 }
 
+/* Size and position the SVG overlay to exactly cover the rendered image
+   (which may be aspect-fitted/letterboxed inside the wrapper). Without this,
+   the overlay used the wrapper box and click markers drifted vertically. */
+function syncCalOverlay(){
+  const img  = document.getElementById("calImage");
+  const wrap = document.getElementById("calCanvasWrap");
+  const svg  = document.getElementById("calOverlay");
+  if(!img || !wrap || !svg) return;
+  const ir = img.getBoundingClientRect();
+  const wr = wrap.getBoundingClientRect();
+  svg.style.left   = (ir.left - wr.left) + "px";
+  svg.style.top    = (ir.top  - wr.top)  + "px";
+  svg.style.width  = ir.width  + "px";
+  svg.style.height = ir.height + "px";
+  svg.style.right  = "auto";
+  svg.style.bottom = "auto";
+}
+
 function calCanvasClick(e){
   if(!calState) return;
   const img = document.getElementById("calImage");
@@ -36,6 +57,8 @@ function calCanvasClick(e){
   // Coordinates as percent of displayed image area
   const xPct = ((e.clientX - rect.left) / rect.width) * 100;
   const yPct = ((e.clientY - rect.top)  / rect.height) * 100;
+  // Ignore clicks that land outside the image (e.g. in the letterbox margin).
+  if(xPct < 0 || xPct > 100 || yPct < 0 || yPct > 100) return;
   if(!calState.pt1){
     calState.pt1 = { x:xPct, y:yPct };
     document.getElementById("calStatus").innerHTML = "Click <b>point 2</b> on the image.";
@@ -56,6 +79,7 @@ function calCanvasClick(e){
 function drawCalOverlay(){
   const svg = document.getElementById("calOverlay");
   if(!svg || !calState) return;
+  syncCalOverlay();   // keep the overlay aligned to the image before drawing
   let html = "";
   const r = 1.2; // viewBox is 100x100 % space
   if(calState.pt1){
@@ -80,6 +104,9 @@ function wireCalibrationModal(){
     if(e.target.id === "calibrationBackdrop") closeCalibrationModal();
   });
   document.getElementById("calCanvasWrap").addEventListener("click", calCanvasClick);
+  // Re-align the overlay if the window resizes while calibrating (points are
+  // stored as % of the image, so they stay valid — only the box moves).
+  window.addEventListener("resize", ()=>{ if(calState) drawCalOverlay(); });
   document.getElementById("calClear").addEventListener("click", ()=>{
     if(!calState) return;
     calState.pt1 = null; calState.pt2 = null;
@@ -95,6 +122,7 @@ function wireCalibrationModal(){
     // Apply without scale
     applyFloorPlan({ ...p, scale:null });
     closeCalibrationModal();
+    _maybeAdvanceProjectImport();
   });
   document.getElementById("calConfirm").addEventListener("click", ()=>{
     if(!calState || !calState.pt1 || !calState.pt2) return;
@@ -112,7 +140,19 @@ function wireCalibrationModal(){
     const pxPerUnit = linePx / dist;
     applyFloorPlan({ ...p, scale:{ pxPerUnit, unit } });
     closeCalibrationModal();
+    _maybeAdvanceProjectImport();
   });
+}
+
+// If the Import Project wizard is currently open, refresh the step cards
+// after the floor plan / calibration step finishes.
+function _maybeAdvanceProjectImport(){
+  if(!state.pendingProjectImport) return;
+  state.pendingProjectImport = null;
+  const bd = document.getElementById("projectImportBackdrop");
+  if(bd && bd.classList.contains("open") && typeof _piRefreshCards === "function"){
+    _piRefreshCards();
+  }
 }
 
 /* ------------------------------------------------------------------
@@ -140,26 +180,34 @@ let ebAmenityDraft = null;
 function blankDraft(){
   return {
     label: "",
-    short: "",
+    description: "",
     risk: 2,
     operationRisk: 2,
     w: 8, h: 6,
     cat: "",
     beginner: false,
+    // Shape coords during EDITING are in absolute % of stage (consistent
+    // with how form inputs round-trip through builderInputToPct / Display).
+    // saveCustomElement tightens the bounding around the shapes and
+    // normalizes everything to local 0-100 of that bounding for storage.
     shapes: [
-      { type:"rect", x:10, y:25, w:80, h:50, rotation:0 }
+      { type:"rect", x:0, y:0, w:6, h:4, rotation:0 }
     ],
     principalAxis: { angle: 0, length: 40 },
-    operatorFootprint:    { type:"none" },
-    maintenanceFootprint: { type:"none" },
-    kickbackVector:       { type:"none" },
-    materialVector:       { type:"none" },
+    operatorFootprints:    [],   // each entry: { type, ...params }
+    maintenanceFootprints: [],
+    kickbackVectors:       [],
+    materialVectors:       [],
     variableAttrs: {
       flammability: 2,
       collateralDamage: 2,
       maintenanceFrequency: "weekly",
       noiseDb: 60,
       smellFumes: 1,
+      // Required personal protective equipment (array of keys) and any
+      // free-text mandatory safety practices. Feed the safety scoring.
+      ppe: [],
+      safetyPractices: "",
     },
   };
 }
@@ -246,21 +294,38 @@ function openElementBuilderForEdit(id){
   alert("Element not found.");
 }
 
+// Normalize legacy singular fields into the new array shape so old
+// elements continue to render and edit. Each call returns a fresh array.
+function _toArr(legacy, arr){
+  const out = Array.isArray(arr) ? arr.map(e => ({...e})) : [];
+  if(legacy && legacy.type && legacy.type !== "none") out.unshift({ ...legacy });
+  return out;
+}
+
 function openToolForEdit(def){
   state.editingId = def.id;
   state.editingType = "tool";
+  // Convert stored shapes & risk zones (local 0-100 of bounding) back to
+  // absolute coords (% of stage) so the editor form shows real-unit
+  // values consistent with what the user typed when creating them.
+  const W = def.w || 0, H = def.h || 0;
+  const absShapes = (def.shapes || []).map(sh => _denormShape(sh, W, H));
+  const denormArr = arr => (arr || []).map(z => _denormRiskZone(z, W, H));
   ebDraft = JSON.parse(JSON.stringify({
-    label: def.label, short: def.short,
+    label: def.label,
+    description: def.description || "",
     risk: def.risk, operationRisk: def.operationRisk || 2,
     w: def.w, h: def.h,
     cat: def.cat || "", beginner: !!def.beginner,
-    shapes: def.shapes || [{type:"rect",x:10,y:25,w:80,h:50,rotation:0}],
+    shapes: absShapes.length ? absShapes : [{type:"rect", x:0, y:0, w:6, h:4, rotation:0}],
     principalAxis: def.principalAxis || {angle:0, length:40},
-    operatorFootprint:    def.operatorFootprint    || {type:"none"},
-    maintenanceFootprint: def.maintenanceFootprint || {type:"none"},
-    kickbackVector:       def.kickbackVector       || {type:"none"},
-    materialVector:       def.materialVector       || {type:"none"},
+    operatorFootprints:    denormArr(_toArr(def.operatorFootprint,    def.operatorFootprints)),
+    maintenanceFootprints: denormArr(_toArr(def.maintenanceFootprint, def.maintenanceFootprints)),
+    kickbackVectors:       denormArr(_toArr(def.kickbackVector,       def.kickbackVectors)),
+    materialVectors:       denormArr(_toArr(def.materialVector,       def.materialVectors)),
     variableAttrs: def.variableAttrs || blankDraft().variableAttrs,
+    dba_active:    Number.isFinite(def.dba_active)    ? def.dba_active    : null,
+    schedule_prob: Number.isFinite(def.schedule_prob) ? def.schedule_prob : null,
   }));
   document.getElementById("elementBuilderBackdrop").classList.add("open");
   showBuilderScreen("tool");
@@ -272,6 +337,12 @@ function openToolForEdit(def){
 }
 
 function openStructuralForEdit(def){
+  // Elements drawn in the wall editor are polygons — edit them there
+  // (it loads the whole floor plan, so all drawn pieces are editable).
+  if(def && def.rawDraw && typeof openWallDraw === "function"){
+    openWallDraw();
+    return;
+  }
   state.editingId = def.id;
   state.editingType = "structural";
   ebStructDraft = JSON.parse(JSON.stringify({
@@ -280,6 +351,7 @@ function openStructuralForEdit(def){
     shapes: def.shapes || [],
     countWalls: !!def.countWalls,
     doorSwing: def.doorSwing || 90,
+    stcOverride: Number.isFinite(def.stcOverride) ? def.stcOverride : null,
   }));
   document.getElementById("elementBuilderBackdrop").classList.add("open");
   showBuilderScreen("structural");
@@ -294,7 +366,7 @@ function openAmenityForEdit(def){
   ebAmenityDraft = JSON.parse(JSON.stringify({
     label: def.label,
     subtype: def.subtype || "first_aid",
-    size: def.w || 3,
+    w: def.w || 2, h: def.h || def.w || 2,
     coverage: def.coverage || 15,
   }));
   document.getElementById("elementBuilderBackdrop").classList.add("open");
@@ -319,6 +391,65 @@ function switchBuilderTab(name){
     p.classList.toggle("active", p.dataset.tab === name);
   });
   if(name === "footprint" || name === "zones") drawShapeCanvas();
+  if(name === "export") refreshExportTab();
+}
+
+/* Element Builder → Export tab. Serializes just the current draft as a
+   one-element elements-bundle JSON so it can be imported into another
+   project verbatim. */
+function refreshExportTab(){
+  const preEl = document.getElementById("ebExportPreview");
+  const fnEl  = document.getElementById("ebExportFilename");
+  if(!preEl || !ebDraft) return;
+  readFormIntoDraft();
+  const def = buildDefFromDraft(ebDraft, ebDraft._exportId || _ebSlug(ebDraft.label || "element"));
+  const bundle = {
+    kind: "elements-bundle",
+    name: (ebDraft.label || "Element") + " — single-element export",
+    generatedAt: new Date().toISOString(),
+    elementDefs: [def],
+  };
+  preEl.textContent = JSON.stringify(bundle, null, 2);
+  if(fnEl && !fnEl.value){
+    fnEl.value = `element_${_ebSlug(ebDraft.label || "element")}.json`;
+  }
+}
+
+function _ebSlug(s){
+  return String(s || "element").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "") || "element";
+}
+
+function _ebExportDownload(){
+  const preEl = document.getElementById("ebExportPreview");
+  const fnEl  = document.getElementById("ebExportFilename");
+  if(!preEl) return;
+  refreshExportTab();
+  const txt = preEl.textContent || "";
+  if(!txt || txt === "—") return;
+  const blob = new Blob([txt], { type: "application/json" });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement("a");
+  a.href = url;
+  a.download = (fnEl && fnEl.value.trim()) || `element_${_ebSlug(ebDraft.label || "element")}.json`;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); }, 200);
+}
+
+function _ebExportCopy(){
+  const preEl = document.getElementById("ebExportPreview");
+  if(!preEl) return;
+  refreshExportTab();
+  const txt = preEl.textContent || "";
+  if(!txt || txt === "—") return;
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(txt).then(
+      ()=>{ const btn = document.getElementById("ebExportCopy"); if(btn){ const o = btn.textContent; btn.textContent = "Copied ✓"; setTimeout(()=>{ btn.textContent = o; }, 1200); } },
+      ()=>{ alert("Could not copy — your browser blocked clipboard access."); }
+    );
+  } else {
+    alert("Clipboard API unavailable in this browser.");
+  }
 }
 
 function renderChooserExisting(){
@@ -340,9 +471,11 @@ function renderChooserExisting(){
     row.innerHTML = `
       <span class="cli-label">${d.label}</span>
       <span class="cli-meta">${typeTag}</span>
+      <button class="cli-dup" data-id="${d.id}" title="Create a copy of this element">Duplicate</button>
       <button class="cli-edit" data-id="${d.id}">Edit</button>
       <button class="cli-del" data-id="${d.id}">Remove</button>
     `;
+    row.querySelector(".cli-dup").addEventListener("click", ()=> duplicateElement(d.id, type));
     row.querySelector(".cli-edit").addEventListener("click", ()=> openElementBuilderForEdit(d.id));
     row.querySelector(".cli-del").addEventListener("click", ()=>{
       if(type === "tool") deleteCustomElement(d.id);
@@ -351,6 +484,36 @@ function renderChooserExisting(){
     });
     listEl.appendChild(row);
   }
+}
+
+/* Duplicate a custom element (tool / structural / amenity): deep-clone with a
+   fresh id, "(copy)" label, and a small position offset so it's visible. */
+function duplicateElement(id, type){
+  const coll = type === "tool" ? state.customElements
+             : type === "structural" ? state.structuralElements
+             : state.amenityElements;
+  const def = coll.find(d => d.id === id);
+  if(!def) return;
+  const copy = JSON.parse(JSON.stringify(def));
+  const taken = new Set(allZoneDefs().map(x => x.id));
+  let base = id + "_copy", n = 2, nid = base;
+  while(taken.has(nid)){ nid = base + "_" + n; n++; }
+  copy.id = nid;
+  copy.label = (def.label || "Element") + " (copy)";
+  if(copy.short !== undefined) copy.short = copy.label.slice(0, 10);
+  const off = 3;
+  // Keep a drawn element's reload geometry consistent with its offset position.
+  if(copy.rawDraw && Array.isArray(copy.rawDraw.points)){
+    copy.rawDraw.points = copy.rawDraw.points.map(p => ({ x: clamp(p.x + off, 0, 100), y: clamp(p.y + off, 0, 100) }));
+  }
+  coll.push(copy);
+  const z = state.zones[id];
+  state.zones[nid] = z
+    ? { ...z, x: clamp((z.x||0) + off, 0, 100 - (z.w||0)), y: clamp((z.y||0) + off, 0, 100 - (z.h||0)) }
+    : { x:5, y:5, w: copy.w || 8, h: copy.h || 6, rotation:0, included:true, activeUse:false, locked: !!copy.fixed };
+  evaluate(); render();
+  renderChooserExisting();
+  if(typeof saveAppState === "function") saveAppState();
 }
 
 /* --- Form ⇄ draft mapping ---
@@ -367,23 +530,278 @@ function builderInputToPct(v, axis){
 }
 function updateBuilderUnitLabels(){
   const u = unitLabel();
-  for(const id of ["ebWUnit","ebHUnit","amSizeUnit","amCoverageUnit"]){
+  for(const id of ["ebWUnit","ebHUnit","amWidthUnit","amHeightUnit","amCoverageUnit"]){
     const el = document.getElementById(id);
     if(el) el.textContent = hasScale() ? u : "% of stage";
   }
+}
+
+/* Union extent of every "physical" region the element occupies in local
+   0..100 coords: footprint shapes + non-vector operator/maintenance/
+   kickback/material zones. Vector cones are excluded because they
+   extend to infinity (clipped by walls at render time).
+   Pass an extents object instead of just shapes so we can capture all
+   risk-zone kinds without duplicating the loop. */
+function _absorbRect(box, x1, y1, x2, y2){
+  if(x1 < box.x1) box.x1 = x1;
+  if(y1 < box.y1) box.y1 = y1;
+  if(x2 > box.x2) box.x2 = x2;
+  if(y2 > box.y2) box.y2 = y2;
+}
+
+function _ebFullExtent(draft){
+  const box = { x1: Infinity, y1: Infinity, x2: -Infinity, y2: -Infinity };
+  // 1. Footprint shapes (these set the baseline).
+  for(const sh of (draft.shapes || [])){
+    if(sh.type === "circle"){
+      _absorbRect(box, (sh.x||0)-(sh.radius||0), (sh.y||0)-(sh.radius||0),
+                       (sh.x||0)+(sh.radius||0), (sh.y||0)+(sh.radius||0));
+    } else {
+      _absorbRect(box, sh.x||0, sh.y||0, (sh.x||0)+(sh.w||0), (sh.y||0)+(sh.h||0));
+    }
+  }
+  // 2. Operator / maintenance / kickback / material — radius + shape kinds.
+  //    Vectors are skipped (infinite, wall-clipped).
+  const zoneArrays = [
+    draft.operatorFootprints,
+    draft.maintenanceFootprints,
+    draft.kickbackVectors,
+    draft.materialVectors,
+  ];
+  for(const arr of zoneArrays){
+    if(!Array.isArray(arr)) continue;
+    for(const z of arr){
+      if(!z || z.type === "vector" || z.type === "none") continue;
+      if(z.type === "radius"){
+        const r = z.radius || 0;
+        _absorbRect(box, 50 - r, 50 - r, 50 + r, 50 + r);
+      } else if(z.type === "shape"){
+        const ox = z.offsetX || 0, oy = z.offsetY || 0;
+        const w = z.w || 0,        h = z.h || 0;
+        _absorbRect(box, 50 + ox - w/2, 50 + oy - h/2,
+                         50 + ox + w/2, 50 + oy + h/2);
+      }
+    }
+  }
+  if(!Number.isFinite(box.x1)) return null;
+  return { ...box, w: box.x2 - box.x1, h: box.y2 - box.y1 };
+}
+
+// Back-compat: kept for any callers that just want the shapes extent.
+function _ebShapesExtent(shapes){
+  return _ebFullExtent({ shapes });
+}
+
+/* Shape-only extent (no risk zones). Used as the *bounding* at save
+   time so the rendered boundary tightly wraps the footprint. Risk zones
+   live inside / can extend beyond the bounding — they don't enlarge it. */
+function _ebOnlyShapeExtent(shapes){
+  if(!shapes || !shapes.length) return null;
+  const box = { x1: Infinity, y1: Infinity, x2: -Infinity, y2: -Infinity };
+  for(const sh of shapes){
+    if(sh.type === "circle"){
+      _absorbRect(box, (sh.x||0)-(sh.radius||0), (sh.y||0)-(sh.radius||0),
+                       (sh.x||0)+(sh.radius||0), (sh.y||0)+(sh.radius||0));
+    } else {
+      _absorbRect(box, sh.x||0, sh.y||0, (sh.x||0)+(sh.w||0), (sh.y||0)+(sh.h||0));
+    }
+  }
+  if(!Number.isFinite(box.x1)) return null;
+  return { ...box, w: box.x2 - box.x1, h: box.y2 - box.y1 };
+}
+
+/* Re-normalize one shape from absolute coords to local 0-100 of bounding. */
+function _normShape(sh, ext){
+  if(!ext || ext.w <= 0 || ext.h <= 0) return sh;
+  if(sh.type === "circle"){
+    return { ...sh,
+      x: ((sh.x||0) - ext.x1) / ext.w * 100,
+      y: ((sh.y||0) - ext.y1) / ext.h * 100,
+      radius: (sh.radius || 0) / Math.min(ext.w, ext.h) * 100,
+    };
+  }
+  return { ...sh,
+    x: ((sh.x||0) - ext.x1) / ext.w * 100,
+    y: ((sh.y||0) - ext.y1) / ext.h * 100,
+    w: (sh.w || 0) / ext.w * 100,
+    h: (sh.h || 0) / ext.h * 100,
+  };
+}
+
+/* Re-normalize one risk-zone entry from absolute coords to local 0-100. */
+function _normRiskZone(z, ext){
+  if(!ext || ext.w <= 0 || ext.h <= 0) return z;
+  const out = {...z};
+  if(z.type === "radius"){
+    out.radius = (z.radius || 0) / Math.min(ext.w, ext.h) * 100;
+  } else if(z.type === "shape"){
+    out.w = (z.w || 0) / ext.w * 100;
+    out.h = (z.h || 0) / ext.h * 100;
+    out.offsetX = (z.offsetX || 0) / ext.w * 100;
+    out.offsetY = (z.offsetY || 0) / ext.h * 100;
+  } else if(z.type === "vector"){
+    out.offsetX = (z.offsetX || 0) / ext.w * 100;
+    out.offsetY = (z.offsetY || 0) / ext.h * 100;
+  }
+  return out;
+}
+
+/* Inverse: local 0-100 of bounding (W,H) back to absolute coords.
+   Used at openToolForEdit so the form starts with absolute values. */
+function _denormShape(sh, W, H){
+  if(!W || !H) return sh;
+  if(sh.type === "circle"){
+    return { ...sh,
+      x: (sh.x||0) / 100 * W,
+      y: (sh.y||0) / 100 * H,
+      radius: (sh.radius || 0) / 100 * Math.min(W, H),
+    };
+  }
+  return { ...sh,
+    x: (sh.x||0) / 100 * W,
+    y: (sh.y||0) / 100 * H,
+    w: (sh.w || 0) / 100 * W,
+    h: (sh.h || 0) / 100 * H,
+  };
+}
+
+function _denormRiskZone(z, W, H){
+  if(!W || !H) return z;
+  const out = {...z};
+  if(z.type === "radius"){
+    out.radius = (z.radius || 0) / 100 * Math.min(W, H);
+  } else if(z.type === "shape"){
+    out.w = (z.w || 0) / 100 * W;
+    out.h = (z.h || 0) / 100 * H;
+    out.offsetX = (z.offsetX || 0) / 100 * W;
+    out.offsetY = (z.offsetY || 0) / 100 * H;
+  } else if(z.type === "vector"){
+    out.offsetX = (z.offsetX || 0) / 100 * W;
+    out.offsetY = (z.offsetY || 0) / 100 * H;
+  }
+  return out;
+}
+
+/* "Current size: 4.5 ft × 3 ft" readout under the Basic tab. */
+function updateBuilderSizeReadout(){
+  const out = document.getElementById("ebSizeReadoutValue");
+  if(!out || !ebDraft) return;
+  // Use the shape-only extent — that's what saveCustomElement uses as
+  // the bounding, and what the user sees as the boundary on stage.
+  const ext = _ebOnlyShapeExtent(ebDraft.shapes);
+  if(!ext){ out.textContent = "—"; return; }
+  const w = ext.w, h = ext.h;
+  const u = unitLabel();
+  if(hasScale()){
+    out.textContent = `${builderDisplayDim(w,"x").toFixed(2)} × ${builderDisplayDim(h,"y").toFixed(2)} ${u}`;
+  } else {
+    out.textContent = `${w.toFixed(1)} × ${h.toFixed(1)} ${u}`;
+  }
+}
+
+/* Editable color+name category picker used by the Element Builder Basic
+   tab. Categories live on state.categories so they persist across
+   reloads via the autosave snapshot. */
+function renderCategoryPicker(){
+  const host = document.getElementById("ebCategoryPicker");
+  if(!host) return;
+  const cats = (state.categories || []);
+  const hidden = document.getElementById("ebCat");
+  const current = (hidden && hidden.value) || (ebDraft && ebDraft.cat) || "";
+  host.innerHTML = "";
+  // Chip order doubles as stage-layering order: earlier categories
+  // sit underneath, later ones on top. Drag to reorder.
+  cats.forEach((c, idx) => {
+    const chip = document.createElement("span");
+    chip.className = "eb-cat-chip" + (c.id === current ? " selected" : "");
+    chip.draggable = true;
+    chip.dataset.catId = c.id;
+    chip.title = `Drag to reorder — earlier = behind, later = in front (layer ${idx + 1} of ${cats.length})`;
+    chip.innerHTML = `<span class="eb-cat-grip" aria-hidden="true">⋮⋮</span><span class="eb-cat-swatch" style="background:${c.color}"></span><span class="eb-cat-name">${c.label}</span><button type="button" class="eb-cat-del" title="Remove this category">×</button>`;
+    chip.addEventListener("click", (e)=>{
+      if(e.target.closest(".eb-cat-del")) return;
+      if(hidden) hidden.value = c.id;
+      if(ebDraft) ebDraft.cat = c.id;
+      renderCategoryPicker();
+    });
+    chip.addEventListener("dragstart", (e) => {
+      e.dataTransfer.setData("text/cat-id", c.id);
+      e.dataTransfer.effectAllowed = "move";
+      chip.classList.add("dragging");
+    });
+    chip.addEventListener("dragend", () => chip.classList.remove("dragging"));
+    chip.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      chip.classList.add("drop-target");
+    });
+    chip.addEventListener("dragleave", () => chip.classList.remove("drop-target"));
+    chip.addEventListener("drop", (e) => {
+      e.preventDefault();
+      chip.classList.remove("drop-target");
+      const fromId = e.dataTransfer.getData("text/cat-id");
+      if(!fromId || fromId === c.id) return;
+      const arr = state.categories;
+      const fromIdx = arr.findIndex(x => x.id === fromId);
+      const toIdx   = arr.findIndex(x => x.id === c.id);
+      if(fromIdx < 0 || toIdx < 0) return;
+      const [moved] = arr.splice(fromIdx, 1);
+      arr.splice(toIdx, 0, moved);
+      renderCategoryPicker();
+      if(typeof renderElementsList === "function") renderElementsList();
+      if(typeof render === "function") render();
+      if(typeof saveAppState === "function") saveAppState();
+    });
+    chip.querySelector(".eb-cat-del").addEventListener("click", (e)=>{
+      e.stopPropagation();
+      if(!confirm(`Remove category "${c.label}"? Elements using it will become uncategorized.`)) return;
+      state.categories = (state.categories || []).filter(x=>x.id !== c.id);
+      // Clear any element def that referenced this category.
+      const clear = arr => { for(const d of arr || []) if(d.cat === c.id) delete d.cat; };
+      clear(state.customElements); clear(state.structuralElements); clear(state.amenityElements);
+      clear(ZONE_DEFS);
+      if(ebDraft && ebDraft.cat === c.id) ebDraft.cat = "";
+      if(hidden && hidden.value === c.id) hidden.value = "";
+      renderCategoryPicker();
+      if(typeof renderElementsList === "function") renderElementsList();
+      if(typeof saveAppState === "function") saveAppState();
+    });
+    host.appendChild(chip);
+  });
+  // "+ Add" inline editor
+  const adder = document.createElement("div");
+  adder.className = "eb-cat-adder";
+  adder.innerHTML = `
+    <input type="color" id="ebCatNewColor" value="#5aa9ff" title="Pick a color" />
+    <input type="text"  id="ebCatNewLabel" placeholder="New group name" maxlength="32" />
+    <button type="button" class="btn ghost" id="ebCatNewAdd">+ Add</button>`;
+  host.appendChild(adder);
+  document.getElementById("ebCatNewAdd").addEventListener("click", ()=>{
+    const label = document.getElementById("ebCatNewLabel").value.trim();
+    const color = document.getElementById("ebCatNewColor").value || "#5aa9ff";
+    if(!label){ alert("Enter a category name."); return; }
+    const slug = label.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
+    let id = slug, n = 2;
+    while((state.categories || []).find(c=>c.id === id)){ id = slug + "_" + n; n++; }
+    (state.categories = state.categories || []).push({ id, label, color });
+    if(hidden) hidden.value = id;
+    if(ebDraft) ebDraft.cat = id;
+    renderCategoryPicker();
+  });
 }
 
 function loadDraftIntoForm(){
   if(!ebDraft) return;
   updateBuilderUnitLabels();
   document.getElementById("ebLabel").value = ebDraft.label;
-  document.getElementById("ebShort").value = ebDraft.short;
+  const descEl = document.getElementById("ebDescription");
+  if(descEl) descEl.value = ebDraft.description || "";
   document.getElementById("ebRisk").value = ebDraft.risk;
   document.getElementById("ebOpRisk").value = ebDraft.operationRisk;
-  document.getElementById("ebW").value = builderDisplayDim(ebDraft.w, "x");
-  document.getElementById("ebH").value = builderDisplayDim(ebDraft.h, "y");
   document.getElementById("ebCat").value = ebDraft.cat || "";
   document.getElementById("ebBeginner").value = String(ebDraft.beginner);
+  updateBuilderSizeReadout();
+  renderCategoryPicker();
   document.getElementById("ebAxisAngle").value = ebDraft.principalAxis.angle;
   document.getElementById("ebAxisLength").value = ebDraft.principalAxis.length;
   document.getElementById("ebFlam").value = ebDraft.variableAttrs.flammability;
@@ -391,6 +809,14 @@ function loadDraftIntoForm(){
   document.getElementById("ebMaintFreq").value = ebDraft.variableAttrs.maintenanceFrequency;
   document.getElementById("ebNoise").value = ebDraft.variableAttrs.noiseDb;
   document.getElementById("ebSmell").value = ebDraft.variableAttrs.smellFumes;
+  // PPE / safety practices.
+  const _ppe = Array.isArray(ebDraft.variableAttrs.ppe) ? ebDraft.variableAttrs.ppe : [];
+  document.querySelectorAll(".eb-ppe-cb").forEach(cb => { cb.checked = _ppe.includes(cb.dataset.ppe); });
+  const _sp = document.getElementById("ebSafetyPractices");
+  if(_sp) _sp.value = ebDraft.variableAttrs.safetyPractices || "";
+  // Noise source: the operating dBA is the same "Operating Noise" field in
+  // Variable Attributes (ebNoise); only schedule probability is separate.
+  document.getElementById("ebSchedProb").value = (ebDraft.schedule_prob !== undefined && ebDraft.schedule_prob !== null) ? ebDraft.schedule_prob : "";
   updateBuilderPreview();
   renderShapeList();
   renderRiskZoneEditor("operator");
@@ -403,11 +829,13 @@ function loadDraftIntoForm(){
 function readFormIntoDraft(){
   if(!ebDraft) return;
   ebDraft.label = document.getElementById("ebLabel").value.trim();
-  ebDraft.short = document.getElementById("ebShort").value.trim();
+  const descEl2 = document.getElementById("ebDescription");
+  ebDraft.description = descEl2 ? descEl2.value.trim() : "";
   ebDraft.risk = parseInt(document.getElementById("ebRisk").value, 10);
   ebDraft.operationRisk = parseInt(document.getElementById("ebOpRisk").value, 10);
-  ebDraft.w = builderInputToPct(parseFloat(document.getElementById("ebW").value), "x");
-  ebDraft.h = builderInputToPct(parseFloat(document.getElementById("ebH").value), "y");
+  // ebW / ebH are gone — w/h is derived from the union extent of the
+  // footprint shapes during saveCustomElement. updateBuilderSizeReadout()
+  // shows the live derived size on the Basic tab.
   ebDraft.cat = document.getElementById("ebCat").value || "";
   ebDraft.beginner = document.getElementById("ebBeginner").value === "true";
   ebDraft.principalAxis.angle = parseFloat(document.getElementById("ebAxisAngle").value) || 0;
@@ -417,6 +845,14 @@ function readFormIntoDraft(){
   ebDraft.variableAttrs.maintenanceFrequency = document.getElementById("ebMaintFreq").value;
   ebDraft.variableAttrs.noiseDb = parseFloat(document.getElementById("ebNoise").value) || 0;
   ebDraft.variableAttrs.smellFumes = parseInt(document.getElementById("ebSmell").value, 10);
+  // PPE / safety practices.
+  ebDraft.variableAttrs.ppe = Array.from(document.querySelectorAll(".eb-ppe-cb"))
+    .filter(cb => cb.checked).map(cb => cb.dataset.ppe);
+  const _spIn = document.getElementById("ebSafetyPractices");
+  ebDraft.variableAttrs.safetyPractices = _spIn ? _spIn.value.trim() : "";
+  // Noise source: operating dBA = the Operating Noise field (variableAttrs.noiseDb).
+  const probRaw = document.getElementById("ebSchedProb").value.trim();
+  ebDraft.schedule_prob = probRaw === "" ? null : Math.max(0, Math.min(1, parseFloat(probRaw)));
 }
 
 function updateBuilderPreview(){
@@ -430,22 +866,54 @@ function updateBuilderPreview(){
 }
 
 /* --- Shape list editor (tab 2) --- */
+/* Element Builder shape coords are now CENTERED — the user enters the
+   shape's CENTER (cx, cy) relative to the element's center (0,0 = middle).
+   We continue to store top-left-anchored coords internally so the render
+   pipeline doesn't change. */
+function _shapeCenter(sh){
+  if(sh.type === "circle") return { cx: (sh.x||0) - 50, cy: (sh.y||0) - 50 };
+  return { cx: ((sh.x||0) + (sh.w||0)/2) - 50, cy: ((sh.y||0) + (sh.h||0)/2) - 50 };
+}
+function _setShapeCenterX(sh, cx){
+  if(sh.type === "circle") sh.x = cx + 50;
+  else sh.x = (cx + 50) - (sh.w||0)/2;
+}
+function _setShapeCenterY(sh, cy){
+  if(sh.type === "circle") sh.y = cy + 50;
+  else sh.y = (cy + 50) - (sh.h||0)/2;
+}
+
 function renderShapeList(){
   const listEl = document.getElementById("ebShapeList");
   listEl.innerHTML = "";
+  // When the floor plan has a scale, show every shape coord in real units
+  // (ft/m). Otherwise stay in local 0..100 percent of the bounding box.
+  const u = unitLabel();
+  // Per-axis conversion: X-axis fields (Cx, W, radius) use stage-width
+  // pixels-per-unit; Y-axis fields (Cy, H) use stage-height. Without
+  // this split, 4 ft × 4 ft renders as a rectangle on non-square stages.
+  const dvx = v => +(builderDisplayDim(v, "x")).toFixed(2);
+  const dvy = v => +(builderDisplayDim(v, "y")).toFixed(2);
+  const ivx = v => builderInputToPct(parseFloat(v), "x");
+  const ivy = v => builderInputToPct(parseFloat(v), "y");
+  const hdr = document.querySelector('#screenTool .shape-row-headers');
+  if(hdr){
+    hdr.innerHTML = `<div>Type</div><div>Cx (${u})</div><div>Cy (${u})</div><div>W / R (${u})</div><div>H (${u})</div><div></div>`;
+  }
   ebDraft.shapes.forEach((sh, i)=>{
     const row = document.createElement("div");
     row.className = "shape-row";
+    const c = _shapeCenter(sh);
     if(sh.type === "rect"){
       row.innerHTML = `
         <select data-idx="${i}" data-key="type">
           <option value="rect" selected>Rect</option>
           <option value="circle">Circle</option>
         </select>
-        <input type="number" min="0" max="100" step="1" value="${sh.x}" data-idx="${i}" data-key="x" />
-        <input type="number" min="0" max="100" step="1" value="${sh.y}" data-idx="${i}" data-key="y" />
-        <input type="number" min="1" max="100" step="1" value="${sh.w}" data-idx="${i}" data-key="w" />
-        <input type="number" min="1" max="100" step="1" value="${sh.h}" data-idx="${i}" data-key="h" />
+        <input type="number" step="0.5" value="${dvx(c.cx)}" data-idx="${i}" data-key="cx" title="Center X (0 = element center)" />
+        <input type="number" step="0.5" value="${dvy(c.cy)}" data-idx="${i}" data-key="cy" title="Center Y (0 = element center)" />
+        <input type="number" min="0.1" step="0.5" value="${dvx(sh.w)}" data-idx="${i}" data-key="w" />
+        <input type="number" min="0.1" step="0.5" value="${dvy(sh.h)}" data-idx="${i}" data-key="h" />
         <button class="sr-del" data-idx="${i}" title="Remove">×</button>
       `;
     } else {
@@ -454,9 +922,9 @@ function renderShapeList(){
           <option value="rect">Rect</option>
           <option value="circle" selected>Circle</option>
         </select>
-        <input type="number" min="0" max="100" step="1" value="${sh.x}" data-idx="${i}" data-key="x" title="Center X" />
-        <input type="number" min="0" max="100" step="1" value="${sh.y}" data-idx="${i}" data-key="y" title="Center Y" />
-        <input type="number" min="1" max="50" step="1" value="${sh.radius}" data-idx="${i}" data-key="radius" title="Radius" />
+        <input type="number" step="0.5" value="${dvx(c.cx)}" data-idx="${i}" data-key="cx" title="Center X (0 = element center)" />
+        <input type="number" step="0.5" value="${dvy(c.cy)}" data-idx="${i}" data-key="cy" title="Center Y (0 = element center)" />
+        <input type="number" min="0.1" step="0.5" value="${dvx(sh.radius)}" data-idx="${i}" data-key="radius" title="Radius" />
         <span class="sr-label" style="text-align:center;align-self:center">—</span>
         <button class="sr-del" data-idx="${i}" title="Remove">×</button>
       `;
@@ -469,23 +937,28 @@ function renderShapeList(){
       const key = e.target.dataset.key;
       const sh = ebDraft.shapes[idx];
       if(key === "type"){
-        // Convert representation
+        // Preserve the shape's center when converting between rect and circle.
+        const c = _shapeCenter(sh);
         if(e.target.value === "circle"){
           ebDraft.shapes[idx] = { type:"circle",
-            x: (sh.x||0) + (sh.w||0)/2,
-            y: (sh.y||0) + (sh.h||0)/2,
+            x: c.cx + 50, y: c.cy + 50,
             radius: Math.min(sh.w||20, sh.h||20)/2 };
         } else {
+          const w = (sh.radius||10)*2, h = (sh.radius||10)*2;
           ebDraft.shapes[idx] = { type:"rect",
-            x: Math.max(0, (sh.x||50) - (sh.radius||10)),
-            y: Math.max(0, (sh.y||50) - (sh.radius||10)),
-            w: (sh.radius||10)*2,
-            h: (sh.radius||10)*2,
-            rotation: 0 };
+            x: (c.cx + 50) - w/2, y: (c.cy + 50) - h/2,
+            w, h, rotation: 0 };
         }
         renderShapeList();
+      } else if(key === "cx"){
+        _setShapeCenterX(sh, ivx(e.target.value));
+      } else if(key === "cy"){
+        _setShapeCenterY(sh, ivy(e.target.value));
+      } else if(key === "h"){
+        sh.h = ivy(e.target.value);
       } else {
-        sh[key] = parseFloat(e.target.value);
+        // w, radius — X-axis
+        sh[key] = ivx(e.target.value);
       }
       drawShapeCanvas();
     });
@@ -500,64 +973,147 @@ function renderShapeList(){
   });
 }
 
-/* --- Risk-zone editor (tab 3) --- */
-const RISK_ZONE_KEYS = {
-  operator: "operatorFootprint",
-  maintenance: "maintenanceFootprint",
-  kickback: "kickbackVector",
-  material: "materialVector",
+/* --- Risk-zone editor (tab 3) --- maps zone-kind → draft array. */
+const RISK_ZONE_ARRAY_KEYS = {
+  operator:    "operatorFootprints",
+  maintenance: "maintenanceFootprints",
+  kickback:    "kickbackVectors",
+  material:    "materialVectors",
 };
 
+// Default type per zone. Material loading is a BOUNDED footprint (a staging
+// clearance area) like operator/maintenance — not an infinite "vector" cone,
+// which read as the tool's boundary and swept oddly on rotation. Kickback
+// stays a vector (a hazard that travels until it hits a wall).
+const RISK_ZONE_DEFAULT_TYPE = {
+  operator:    "radius",
+  maintenance: "shape",
+  kickback:    "vector",
+  material:    "shape",
+};
+
+function _rzNewEntry(zone){
+  const t = RISK_ZONE_DEFAULT_TYPE[zone] || "radius";
+  if(t === "radius") return { type:"radius", radius: 15 };
+  if(t === "shape")  return { type:"shape",  w: 20, h: 15, offsetX: 0, offsetY: 0 };
+  return { type:"vector", angle: 0, angleSpread: 12, offsetX: 0, offsetY: 0 };
+}
+
+function _rzEntryHTML(zone, entry, i){
+  const u = unitLabel();
+  const allowed = (zone === "kickback")
+    ? ["vector","radius","shape"]   // kickback is a travelling hazard → vector first
+    : ["radius","shape","vector"];  // operator / maintenance / material → footprints first
+  const typeOpts = allowed.map(t =>
+    `<option value="${t}"${entry.type === t ? " selected" : ""}>${
+      t === "radius" ? "Radius" : t === "shape" ? "Rectangle" : "Vector"
+    }</option>`).join("");
+
+  let params = "";
+  if(entry.type === "radius"){
+    params = `
+      <div class="rz-field"><label>Radius (${u})</label>
+        <input type="number" data-z="${zone}" data-i="${i}" data-k="radius" min="0" step="0.5" value="${displayValue(entry.radius ?? 15, "x")}" /></div>`;
+  } else if(entry.type === "shape"){
+    // Migrate legacy `offset` to offsetX/offsetY once.
+    if(entry.offsetX === undefined && entry.offset !== undefined){
+      const angRad = ((ebDraft.principalAxis && ebDraft.principalAxis.angle) || 0) * Math.PI/180;
+      entry.offsetX = Math.cos(angRad) * entry.offset;
+      entry.offsetY = Math.sin(angRad) * entry.offset;
+      delete entry.offset;
+    }
+    params = `
+      <div class="rz-field"><label>Width (${u})</label>
+        <input type="number" data-z="${zone}" data-i="${i}" data-k="w" min="0" step="0.5" value="${displayValue(entry.w ?? 20, "x")}" /></div>
+      <div class="rz-field"><label>Height (${u})</label>
+        <input type="number" data-z="${zone}" data-i="${i}" data-k="h" min="0" step="0.5" value="${displayValue(entry.h ?? 15, "y")}" /></div>
+      <div class="rz-field"><label>Offset X (${u})</label>
+        <input type="number" data-z="${zone}" data-i="${i}" data-k="offsetX" step="0.5" value="${displayValue(entry.offsetX ?? 0, "x")}" /></div>
+      <div class="rz-field"><label>Offset Y (${u})</label>
+        <input type="number" data-z="${zone}" data-i="${i}" data-k="offsetY" step="0.5" value="${displayValue(entry.offsetY ?? 0, "y")}" /></div>`;
+  } else if(entry.type === "vector"){
+    const spread = entry.angleSpread !== undefined ? entry.angleSpread : 12;
+    const angle  = entry.angle !== undefined ? entry.angle : 0;
+    const offX   = entry.offsetX !== undefined ? entry.offsetX : 0;
+    const offY   = entry.offsetY !== undefined ? entry.offsetY : 0;
+    params = `
+      <div class="rz-field"><label>Angle (° from axis)</label>
+        <input type="number" data-z="${zone}" data-i="${i}" data-k="angle" min="-180" max="180" step="5" value="${angle}" /></div>
+      <div class="rz-field"><label>Spread (° each side)</label>
+        <input type="number" data-z="${zone}" data-i="${i}" data-k="angleSpread" min="0" max="89" step="1" value="${spread}" /></div>
+      <div class="rz-field"><label>Offset X (${u})</label>
+        <input type="number" data-z="${zone}" data-i="${i}" data-k="offsetX" step="0.5" value="${displayValue(offX, "x")}" /></div>
+      <div class="rz-field"><label>Offset Y (${u})</label>
+        <input type="number" data-z="${zone}" data-i="${i}" data-k="offsetY" step="0.5" value="${displayValue(offY, "y")}" /></div>`;
+  }
+
+  return `
+    <div class="rz-entry" data-z="${zone}" data-i="${i}">
+      <div class="rz-entry-hdr">
+        <span class="rz-entry-label">#${i + 1}</span>
+        <select class="rz-entry-type" data-z="${zone}" data-i="${i}">${typeOpts}</select>
+        <button type="button" class="rz-entry-del" data-z="${zone}" data-i="${i}" title="Remove this entry">×</button>
+      </div>
+      <div class="rz-params-grid">${params}</div>
+    </div>`;
+}
+
 function renderRiskZoneEditor(zone){
-  const draftKey = RISK_ZONE_KEYS[zone];
-  const z = ebDraft[draftKey] || { type:"none" };
-  const typeSel = document.querySelector(`.rz-type[data-zone="${zone}"]`);
-  if(typeSel) typeSel.value = z.type;
+  const draftKey = RISK_ZONE_ARRAY_KEYS[zone];
+  if(!ebDraft[draftKey]) ebDraft[draftKey] = [];
+  const arr = ebDraft[draftKey];
   const paramsEl = document.querySelector(`.rz-params[data-zone-params="${zone}"]`);
   if(!paramsEl) return;
 
-  if(z.type === "none"){
-    paramsEl.innerHTML = "";
+  if(!arr.length){
+    paramsEl.innerHTML = `<div class="rz-empty">None. Click <b>+ Add</b> above to create one.</div>`;
     return;
   }
-  let html = "";
-  const u = unitLabel();
-  if(z.type === "radius"){
-    html = `<div class="rz-field"><label>Radius (${u})</label>
-      <input type="number" data-z="${zone}" data-k="radius" min="0" step="0.5" value="${displayValue(z.radius ?? 15)}" /></div>`;
-  } else if(z.type === "shape"){
-    // Initialize offsetX/offsetY from legacy `offset` if needed.
-    if(z.offsetX === undefined && z.offset !== undefined){
-      const angRad = ((ebDraft.principalAxis && ebDraft.principalAxis.angle)||0) * Math.PI/180;
-      z.offsetX = Math.cos(angRad) * z.offset;
-      z.offsetY = Math.sin(angRad) * z.offset;
-      delete z.offset;
-    }
-    html = `
-      <div class="rz-field"><label>Width (${u})</label>
-        <input type="number" data-z="${zone}" data-k="w" min="0" step="0.5" value="${displayValue(z.w ?? 20)}" /></div>
-      <div class="rz-field"><label>Height (${u})</label>
-        <input type="number" data-z="${zone}" data-k="h" min="0" step="0.5" value="${displayValue(z.h ?? 15)}" /></div>
-      <div class="rz-field"><label>Offset X (${u})</label>
-        <input type="number" data-z="${zone}" data-k="offsetX" step="0.5" value="${displayValue(z.offsetX ?? 0)}" /></div>
-      <div class="rz-field"><label>Offset Y (${u})</label>
-        <input type="number" data-z="${zone}" data-k="offsetY" step="0.5" value="${displayValue(z.offsetY ?? 0)}" /></div>`;
-  } else if(z.type === "vector"){
-    html = `
-      <div class="rz-field"><label>Length (${u})</label>
-        <input type="number" data-z="${zone}" data-k="length" min="0" step="0.5" value="${displayValue(z.length ?? 25)}" /></div>
-      <div class="rz-field"><label>Width (${u})</label>
-        <input type="number" data-z="${zone}" data-k="width" min="0" step="0.5" value="${displayValue(z.width ?? 8)}" /></div>`;
-  }
-  paramsEl.innerHTML = html;
-  paramsEl.querySelectorAll("input").forEach(inp=>{
+  paramsEl.innerHTML = arr.map((e, i) => _rzEntryHTML(zone, e, i)).join("");
+
+  // Field inputs — update the matching entry.
+  paramsEl.querySelectorAll("input[data-i]").forEach(inp=>{
     inp.addEventListener("input", e=>{
+      const i = parseInt(e.target.dataset.i, 10);
       const k = e.target.dataset.k;
-      const dz = ebDraft[draftKey];
+      const entry = ebDraft[draftKey][i];
+      if(!entry) return;
       const raw = parseFloat(e.target.value);
       if(!Number.isFinite(raw)) return;
-      // Convert from displayed unit back to internal % storage.
-      dz[k] = inputValue(raw);
+      if(k === "angle" || k === "angleSpread") entry[k] = raw;
+      else {
+        // Per-axis: H / Cy / offsetY use Y-axis; W / Cx / offsetX /
+        // radius use X-axis. Without the split, square inputs render as
+        // rectangles on a non-square stage.
+        const axis = (k === "h" || k === "cy" || k === "offsetY") ? "y" : "x";
+        entry[k] = builderInputToPct(raw, axis);
+      }
+      drawShapeCanvas();
+    });
+  });
+
+  // Type select per entry → reseed defaults for the new type.
+  paramsEl.querySelectorAll(".rz-entry-type").forEach(sel=>{
+    sel.addEventListener("change", e=>{
+      const i = parseInt(e.target.dataset.i, 10);
+      const newType = e.target.value;
+      // Replace with a fresh entry of the new type, keeping nothing.
+      ebDraft[draftKey][i] = (() => {
+        if(newType === "radius") return { type:"radius", radius: 15 };
+        if(newType === "shape")  return { type:"shape",  w: 20, h: 15, offsetX: 0, offsetY: 0 };
+        return { type:"vector", angle: 0, angleSpread: 12, offsetX: 0, offsetY: 0 };
+      })();
+      renderRiskZoneEditor(zone);
+      drawShapeCanvas();
+    });
+  });
+
+  // Delete buttons.
+  paramsEl.querySelectorAll(".rz-entry-del").forEach(btn=>{
+    btn.addEventListener("click", e=>{
+      const i = parseInt(e.target.dataset.i, 10);
+      ebDraft[draftKey].splice(i, 1);
+      renderRiskZoneEditor(zone);
       drawShapeCanvas();
     });
   });
@@ -566,10 +1122,9 @@ function renderRiskZoneEditor(zone){
 /* Helpers: convert a stored % value to displayed real-units value
    and vice versa. When no scale is set, identity. Used by risk-zone
    inputs so the field labels match what the user reads. */
-function displayValue(pct){
+function displayValue(pct, axis){
   if(!hasScale()) return +(+pct).toFixed(2);
-  // Assume "x" axis sizing for risk zones (close enough for these widgets).
-  return +(pctToUnits(pct, 'x')).toFixed(2);
+  return +(pctToUnits(pct, axis || 'x')).toFixed(2);
 }
 function inputValue(displayed){
   if(!hasScale()) return +displayed;
@@ -583,76 +1138,107 @@ function drawShapeCanvas(){
   if(!ebDraft) return;
   drawShapeCanvasInto("ebCanvasGrid", "ebCanvasContent", "");
   drawShapeCanvasInto("ebCanvasGridZ", "ebCanvasContentZ", "Z");
+  updateBuilderSizeReadout();
 }
 
 function drawShapeCanvasInto(gridId, contentId, suffix){
   const content = document.getElementById(contentId);
   const grid = document.getElementById(gridId);
   if(!content || !grid) return;
-  // Grid lines (10% spacing)
-  let g = "";
-  for(let i=10;i<100;i+=10){
-    g += `<line class="grid-line" x1="${i}" y1="0" x2="${i}" y2="100"/>`;
-    g += `<line class="grid-line" x1="0" y1="${i}" x2="100" y2="${i}"/>`;
-  }
-  g += `<line class="center-line" x1="50" y1="0" x2="50" y2="100"/>`;
-  g += `<line class="center-line" x1="0" y1="50" x2="100" y2="50"/>`;
-  grid.innerHTML = g;
 
-  const fakeDef = {
-    id: "_preview",
-    shapes: ebDraft.shapes,
-    principalAxis: ebDraft.principalAxis,
-    operatorFootprint:    ebDraft.operatorFootprint,
-    maintenanceFootprint: ebDraft.maintenanceFootprint,
-    kickbackVector:       ebDraft.kickbackVector,
-    materialVector:       ebDraft.materialVector,
-  };
+  // Render in ABSOLUTE stage-% coordinates (the same space the draft stores)
+  // so the preview keeps the footprint's true aspect ratio. The SVG uses
+  // preserveAspectRatio="meet", so the real proportions show un-distorted —
+  // previously shapes were normalized to a 0-100 box and always looked square.
+  const shapes = ebDraft.shapes || [];
+  const ext = _ebOnlyShapeExtent(shapes) || { x1:40, y1:40, x2:60, y2:60, w:20, h:20 };
+  const cx0 = ext.x1 + ext.w / 2, cy0 = ext.y1 + ext.h / 2;
+  const ang = (ebDraft.principalAxis && ebDraft.principalAxis.angle) || 0;
+  const angRad = ang * Math.PI / 180;
+
+  // 1) footprint shapes
   let inner = "";
-  (fakeDef.shapes || []).forEach(sh=>{
+  shapes.forEach(sh=>{
     if(sh.type === "rect"){
       inner += `<rect class="footprint-shape" x="${sh.x}" y="${sh.y}" width="${sh.w}" height="${sh.h}"${sh.rotation?` transform="rotate(${sh.rotation} ${sh.x+sh.w/2} ${sh.y+sh.h/2})"`:""}/>`;
     } else if(sh.type === "circle"){
       inner += `<circle class="footprint-shape" cx="${sh.x}" cy="${sh.y}" r="${sh.radius}"/>`;
+    } else if(sh.type === "polygon"){
+      inner += `<polygon class="footprint-shape" points="${(sh.points||[]).map(p=>p.x+","+p.y).join(" ")}"/>`;
     }
   });
-  const ang = (fakeDef.principalAxis && fakeDef.principalAxis.angle) || 0;
-  const angRad = ang * Math.PI/180;
 
+  // 2) risk zones — centered on the element center in absolute coords
   function rzSVG(z, cls){
     if(!z || z.type === "none") return "";
     if(z.type === "radius"){
-      return `<circle class="${cls}" cx="50" cy="50" r="${z.radius || 15}"/>`;
+      return `<circle class="${cls}" cx="${cx0}" cy="${cy0}" r="${z.radius || 5}"/>`;
     }
     if(z.type === "shape"){
-      const w = z.w || 20, h = z.h || 15;
+      const w = z.w || 10, h = z.h || 8;
       const ox = z.offsetX !== undefined ? z.offsetX : (z.offset !== undefined ? Math.cos(angRad)*z.offset : 0);
       const oy = z.offsetY !== undefined ? z.offsetY : (z.offset !== undefined ? Math.sin(angRad)*z.offset : 0);
-      // Note: shape zones rotate with the principal axis so "along axis"
-      // semantics stay intuitive even after axis rotation.
-      return `<rect class="${cls}" x="${50 - w/2 + ox}" y="${50 - h/2 + oy}" width="${w}" height="${h}" transform="rotate(${ang} ${50 + ox} ${50 + oy})"/>`;
+      return `<rect class="${cls}" x="${cx0 - w/2 + ox}" y="${cy0 - h/2 + oy}" width="${w}" height="${h}" transform="rotate(${ang} ${cx0 + ox} ${cy0 + oy})"/>`;
     }
     if(z.type === "vector"){
-      const len = z.length || 25, wid = z.width || 8;
-      const kbArrow = "kbArrow" + suffix, matArrow = "matArrow" + suffix;
-      const marker = (cls==="kb-vector") ? `url(#${kbArrow})` : (cls==="mat-vector" ? `url(#${matArrow})` : "");
-      const lx = 50 + Math.cos(angRad)*len, ly = 50 + Math.sin(angRad)*len;
-      return `<rect class="${cls}" x="50" y="${50 - wid/2}" width="${len}" height="${wid}" transform="rotate(${ang} 50 50)"/>
-              <line class="${cls}" x1="50" y1="50" x2="${lx}" y2="${ly}" ${marker?`marker-end="${marker}"`:""}/>`;
+      const spread = z.angleSpread !== undefined ? z.angleSpread : 12;
+      const extraAng = (z.angle || 0) * Math.PI / 180;
+      const sRad = spread * Math.PI / 180;
+      const L = Math.max(ext.w, ext.h) * 1.1;   // readable cone length
+      const cx = cx0 + (z.offsetX || 0), cy = cy0 + (z.offsetY || 0);
+      const dir = angRad + extraAng;
+      const tipL = { x: cx + Math.cos(dir - sRad) * L, y: cy + Math.sin(dir - sRad) * L };
+      const tipR = { x: cx + Math.cos(dir + sRad) * L, y: cy + Math.sin(dir + sRad) * L };
+      return `<polygon class="${cls}" points="${cx.toFixed(2)},${cy.toFixed(2)} ${tipL.x.toFixed(2)},${tipL.y.toFixed(2)} ${tipR.x.toFixed(2)},${tipR.y.toFixed(2)}"/>`;
     }
     return "";
   }
-  inner += rzSVG(fakeDef.operatorFootprint, "op-zone");
-  inner += rzSVG(fakeDef.maintenanceFootprint, "mt-zone");
-  inner += rzSVG(fakeDef.kickbackVector, "kb-vector");
-  inner += rzSVG(fakeDef.materialVector, "mat-vector");
+  for(const e of (ebDraft.operatorFootprints    || [])) inner += rzSVG(e, "op-zone");
+  for(const e of (ebDraft.maintenanceFootprints || [])) inner += rzSVG(e, "mt-zone");
+  for(const e of (ebDraft.kickbackVectors       || [])) inner += rzSVG(e, "kb-vector");
+  for(const e of (ebDraft.materialVectors       || [])) inner += rzSVG(e, "mat-vector");
 
-  if(fakeDef.principalAxis && fakeDef.principalAxis.length > 0){
-    const x2 = 50 + Math.cos(angRad)*fakeDef.principalAxis.length/2;
-    const y2 = 50 + Math.sin(angRad)*fakeDef.principalAxis.length/2;
-    inner += `<line class="axis-arrow" x1="50" y1="50" x2="${x2}" y2="${y2}"/>`;
+  // 3) principal axis (length is % of bounding box → scale per axis)
+  const axLen = (ebDraft.principalAxis && ebDraft.principalAxis.length) || 0;
+  if(axLen > 0){
+    const x2 = cx0 + Math.cos(angRad) * (axLen / 100) * ext.w / 2;
+    const y2 = cy0 + Math.sin(angRad) * (axLen / 100) * ext.h / 2;
+    inner += `<line class="axis-arrow" x1="${cx0}" y1="${cy0}" x2="${x2.toFixed(2)}" y2="${y2.toFixed(2)}"/>`;
   }
   content.innerHTML = inner;
+
+  // 4) viewBox = footprint extent, expanded for non-vector risk zones.
+  let minX = ext.x1, minY = ext.y1, maxX = ext.x2, maxY = ext.y2;
+  const expand = (x, y) => { if(x<minX)minX=x; if(y<minY)minY=y; if(x>maxX)maxX=x; if(y>maxY)maxY=y; };
+  for(const arr of [ebDraft.operatorFootprints, ebDraft.maintenanceFootprints,
+                    ebDraft.kickbackVectors,    ebDraft.materialVectors]){
+    for(const z of (arr || [])){
+      if(!z || z.type === "vector" || z.type === "none") continue;
+      if(z.type === "radius"){
+        const r = z.radius || 0; expand(cx0 - r, cy0 - r); expand(cx0 + r, cy0 + r);
+      } else if(z.type === "shape"){
+        const ox = z.offsetX || 0, oy = z.offsetY || 0, w = z.w || 0, h = z.h || 0;
+        expand(cx0 + ox - w/2, cy0 + oy - h/2); expand(cx0 + ox + w/2, cy0 + oy + h/2);
+      }
+    }
+  }
+  const pad = Math.max(2, (maxX - minX) * 0.08, (maxY - minY) * 0.08);
+  const vbX = minX - pad, vbY = minY - pad;
+  const vbW = Math.max(1, (maxX - minX) + pad * 2), vbH = Math.max(1, (maxY - minY) + pad * 2);
+
+  // grid lines at 10-unit (stage %) intervals across the viewBox + center cross
+  let g = "";
+  for(let x = Math.floor(vbX/10)*10; x <= vbX+vbW; x += 10) g += `<line class="grid-line" x1="${x}" y1="${vbY.toFixed(2)}" x2="${x}" y2="${(vbY+vbH).toFixed(2)}"/>`;
+  for(let y = Math.floor(vbY/10)*10; y <= vbY+vbH; y += 10) g += `<line class="grid-line" x1="${vbX.toFixed(2)}" y1="${y}" x2="${(vbX+vbW).toFixed(2)}" y2="${y}"/>`;
+  g += `<line class="center-line" x1="${cx0}" y1="${vbY.toFixed(2)}" x2="${cx0}" y2="${(vbY+vbH).toFixed(2)}"/>`;
+  g += `<line class="center-line" x1="${vbX.toFixed(2)}" y1="${cy0}" x2="${(vbX+vbW).toFixed(2)}" y2="${cy0}"/>`;
+  grid.innerHTML = g;
+
+  const svgGrid    = grid.closest("svg")    || grid.parentNode;
+  const svgContent = content.closest("svg") || content.parentNode;
+  for(const svg of [svgGrid, svgContent]){
+    if(svg && svg.setAttribute) svg.setAttribute("viewBox", `${vbX.toFixed(2)} ${vbY.toFixed(2)} ${vbW.toFixed(2)} ${vbH.toFixed(2)}`);
+  }
 }
 
 /* --- Save / Update --- */
@@ -660,9 +1246,28 @@ function saveCustomElement(){
   readFormIntoDraft();
   const d = ebDraft;
   if(!d.label){ alert("Please enter a name."); switchBuilderTab("basic"); return; }
-  if(!Number.isFinite(d.w) || d.w<=0 || d.w>50){ alert("Bounding width must be 1-50."); switchBuilderTab("basic"); return; }
-  if(!Number.isFinite(d.h) || d.h<=0 || d.h>50){ alert("Bounding height must be 1-50."); switchBuilderTab("basic"); return; }
   if(!d.shapes || !d.shapes.length){ alert("Add at least one footprint shape."); switchBuilderTab("footprint"); return; }
+  // Bounding = shape extent ONLY (risk zones may extend beyond it
+  // visually). All editing coords are in absolute % of stage; here we
+  // tighten the bounding to the shape extent and re-normalize shapes &
+  // risk zones to local 0-100 of the new bounding so the renderer draws
+  // each piece at its true absolute size.
+  const ext = _ebOnlyShapeExtent(d.shapes);
+  if(!ext || ext.w <= 0 || ext.h <= 0){
+    alert("Element must have a positive footprint area."); switchBuilderTab("footprint"); return;
+  }
+  d.w = ext.w; d.h = ext.h;
+  d.shapes = d.shapes.map(sh => _normShape(sh, ext));
+  for(const k of ["operatorFootprints","maintenanceFootprints","kickbackVectors","materialVectors"]){
+    if(Array.isArray(d[k])) d[k] = d[k].map(z => _normRiskZone(z, ext));
+  }
+  // If a scale is set, also remember the absolute size so the element
+  // keeps its real-world footprint when the floor plan changes.
+  if(hasScale()){
+    d.wReal = pctToUnits(d.w, "x");
+    d.hReal = pctToUnits(d.h, "y");
+    d.realUnit = state.scale.unit;
+  }
 
   if(state.editingId){
     // Update existing
@@ -700,21 +1305,29 @@ function buildDefFromDraft(d, id){
   return {
     id,
     label: d.label,
-    short: d.short || d.label.slice(0, 10),
+    description: d.description || "",
     risk: clamp(d.risk, 0, 5),
     operationRisk: clamp(d.operationRisk, 1, 4),
     w: d.w, h: d.h,
+    wReal: d.wReal,        // absolute width in d.realUnit (if set)
+    hReal: d.hReal,        // absolute height in d.realUnit
+    realUnit: d.realUnit,  // "ft" | "m" | etc.
     cat: d.cat || undefined,
     beginner: !!d.beginner,
     custom: true,
     fixed: false,
     shapes: JSON.parse(JSON.stringify(d.shapes)),
     principalAxis: { angle: d.principalAxis.angle, length: d.principalAxis.length },
-    operatorFootprint:    JSON.parse(JSON.stringify(d.operatorFootprint)),
-    maintenanceFootprint: JSON.parse(JSON.stringify(d.maintenanceFootprint)),
-    kickbackVector:       JSON.parse(JSON.stringify(d.kickbackVector)),
-    materialVector:       JSON.parse(JSON.stringify(d.materialVector)),
+    operatorFootprints:    JSON.parse(JSON.stringify(d.operatorFootprints    || [])),
+    maintenanceFootprints: JSON.parse(JSON.stringify(d.maintenanceFootprints || [])),
+    kickbackVectors:       JSON.parse(JSON.stringify(d.kickbackVectors       || [])),
+    materialVectors:       JSON.parse(JSON.stringify(d.materialVectors       || [])),
     variableAttrs: JSON.parse(JSON.stringify(d.variableAttrs)),
+    // Noise source for sim_noise.js: the operating dBA IS the Operating Noise
+    // attribute (variableAttrs.noiseDb); schedule probability is separate.
+    // sim_noise filters out anything at/below ambient, so quiet tools are skipped.
+    dba_active:    (d.variableAttrs && Number.isFinite(d.variableAttrs.noiseDb) && d.variableAttrs.noiseDb > 0) ? d.variableAttrs.noiseDb : undefined,
+    schedule_prob: Number.isFinite(d.schedule_prob) ? d.schedule_prob : undefined,
   };
 }
 
@@ -781,6 +1394,7 @@ function blankStructuralDraft(){
     shapes: [{ type:"rect", x:20, y:40, w:60, h:10 }],
     countWalls: false,
     doorSwing: 90,
+    stcOverride: null,
   };
 }
 
@@ -790,6 +1404,8 @@ function loadStructuralDraftIntoForm(){
   document.getElementById("sbLabel").value = ebStructDraft.label;
   document.getElementById("sbCountWalls").value = String(ebStructDraft.countWalls);
   document.getElementById("sbDoorSwing").value = ebStructDraft.doorSwing;
+  const stcEl = document.getElementById("sbStcOverride");
+  if(stcEl) stcEl.value = Number.isFinite(ebStructDraft.stcOverride) ? ebStructDraft.stcOverride : "";
   document.getElementById("sbFloorWallToggleField").style.display =
     (ebStructDraft.subtype === "floor") ? "flex" : "none";
   document.getElementById("sbDoorSwingField").style.display =
@@ -1006,6 +1622,7 @@ function saveStructuralElement(){
     countWalls: d.countWalls,
     doorSwing: d.doorSwing,
     unionAreaPct: unionAreaPct(d.shapes),
+    stcOverride: Number.isFinite(d.stcOverride) ? d.stcOverride : undefined,
   });
 
   if(state.editingId){
@@ -1055,13 +1672,14 @@ const AMENITY_SUBTYPES = [
   { id:"sand",             icon:"SA",  label:"Sand Bucket",        coverage:8,  desc:"For metal / Class D fires." },
   { id:"sink",             icon:"SK",  label:"Sink",               coverage:10, desc:"Hand-washing access." },
   { id:"fume_hood",        icon:"FH",  label:"Fume Hood",          coverage:6,  desc:"Local exhaust for fumes / dust." },
+  { id:"trash",            icon:"TR",  label:"Trash Can",          coverage:6,  desc:"Waste receptacle. Toggle bag liner per unit.", hasBag:true },
 ];
 
 function blankAmenityDraft(){
   return {
     label: "",
     subtype: "fire_extinguisher",
-    size: 3,
+    w: 2, h: 2,
     coverage: 12,
   };
 }
@@ -1092,8 +1710,17 @@ function loadAmenityDraftIntoForm(){
   if(!ebAmenityDraft) return;
   updateBuilderUnitLabels();
   document.getElementById("amLabel").value = ebAmenityDraft.label;
-  document.getElementById("amSize").value = builderDisplayDim(ebAmenityDraft.size, "x");
+  document.getElementById("amWidth").value  = builderDisplayDim(ebAmenityDraft.w, "x");
+  document.getElementById("amHeight").value = builderDisplayDim(ebAmenityDraft.h, "y");
   document.getElementById("amCoverage").value = builderDisplayDim(ebAmenityDraft.coverage, "x");
+  // Show bag toggle only for subtypes that support it (e.g. Trash Can).
+  const sub = AMENITY_SUBTYPES.find(s=>s.id === ebAmenityDraft.subtype);
+  const bagField = document.getElementById("amBagField");
+  if(bagField){
+    bagField.style.display = (sub && sub.hasBag) ? "" : "none";
+    const cb = document.getElementById("amHasBag");
+    if(cb) cb.checked = !!ebAmenityDraft.hasBag;
+  }
 }
 
 function saveAmenityElement(){
@@ -1102,7 +1729,7 @@ function saveAmenityElement(){
   const sub = AMENITY_SUBTYPES.find(s=>s.id === d.subtype);
   const label = (d.label || sub.label).trim();
   if(!label){ alert("Please enter a name."); return; }
-  if(!Number.isFinite(d.size) || d.size <= 0){ alert("Marker size must be positive."); return; }
+  if(!Number.isFinite(d.w) || d.w <= 0 || !Number.isFinite(d.h) || d.h <= 0){ alert("Width and height must be positive."); return; }
 
   const buildDef = (id) => ({
     id, label,
@@ -1112,9 +1739,10 @@ function saveAmenityElement(){
     subtype: d.subtype,
     custom: true,
     fixed: false,
-    w: d.size, h: d.size,
+    w: d.w, h: d.h,
     coverage: d.coverage,
     icon: sub.icon,
+    hasBag: sub.hasBag ? !!d.hasBag : undefined,
   });
 
   if(state.editingId){
@@ -1123,7 +1751,7 @@ function saveAmenityElement(){
     const id = state.editingId;
     state.amenityElements[idx] = buildDef(id);
     const z = state.zones[id];
-    if(z){ z.w = d.size; z.h = d.size; }
+    if(z){ z.w = d.w; z.h = d.h; }
   } else {
     const slug = label.toLowerCase().replace(/[^a-z0-9]+/g,"_").replace(/^_|_$/g,"");
     let id = "amenity_" + (slug || d.subtype), n=2;
@@ -1132,7 +1760,7 @@ function saveAmenityElement(){
     state.amenityElements.push(buildDef(id));
     state.zones[id] = {
       x: 0, y: 0,
-      w: d.size, h: d.size, rotation:0,
+      w: d.w, h: d.h, rotation:0,
       included:true, activeUse:false,
       locked: false,
     };
@@ -1163,6 +1791,18 @@ function wireElementBuilder(){
     else if(state.editingType === "amenity") saveAmenityElement();
   });
 
+  // Element Builder → Export tab actions.
+  const exDl = document.getElementById("ebExportDownload");
+  if(exDl) exDl.addEventListener("click", _ebExportDownload);
+  const exCp = document.getElementById("ebExportCopy");
+  if(exCp) exCp.addEventListener("click", _ebExportCopy);
+  // Live-refresh the preview when the user changes anything elsewhere in
+  // the builder — easiest hook is the tab switch (already calls
+  // refreshExportTab) plus an explicit refresh when the filename input
+  // gets focus (covers the "tabs not switched but want fresh data" case).
+  const exFn = document.getElementById("ebExportFilename");
+  if(exFn) exFn.addEventListener("focus", refreshExportTab);
+
   // Back-to-chooser button (visible on non-chooser screens).
   document.getElementById("ebBack").addEventListener("click", ()=>{
     state.editingId = null;
@@ -1176,9 +1816,26 @@ function wireElementBuilder(){
     card.addEventListener("click", ()=>{
       const choice = card.dataset.choice;
       if(choice === "new-tool") startNewTool();
-      else if(choice === "new-structural") startNewStructural();
+      else if(choice === "new-structural"){
+        // Walls / floor / doors are now drawn in the dedicated editor.
+        if(typeof openWallDraw === "function") openWallDraw();
+        else startNewStructural();
+      }
       else if(choice === "new-amenity") startNewAmenity();
       else if(choice === "import-elements") document.getElementById("importElementsInput").click();
+    });
+  });
+
+  // PPE chips: "No PPE required" is mutually exclusive with the specific items.
+  document.querySelectorAll(".eb-ppe-cb").forEach(cb=>{
+    cb.addEventListener("change", ()=>{
+      if(!cb.checked) return;
+      if(cb.dataset.ppe === "none"){
+        document.querySelectorAll(".eb-ppe-cb").forEach(o=>{ if(o !== cb) o.checked = false; });
+      } else {
+        const none = document.querySelector('.eb-ppe-cb[data-ppe="none"]');
+        if(none) none.checked = false;
+      }
     });
   });
 
@@ -1214,16 +1871,14 @@ function wireElementBuilder(){
       drawShapeCanvas();
     });
   });
-  // Risk-zone type dropdowns
-  document.querySelectorAll(".rz-type").forEach(sel=>{
-    sel.addEventListener("change", e=>{
-      const zone = e.target.dataset.zone;
-      const key = RISK_ZONE_KEYS[zone];
-      const newType = e.target.value;
-      if(newType === "none") ebDraft[key] = { type:"none" };
-      else if(newType === "radius") ebDraft[key] = { type:"radius", radius: 15 };
-      else if(newType === "shape") ebDraft[key] = { type:"shape", w:20, h:15, offsetX:0, offsetY:0 };
-      else if(newType === "vector") ebDraft[key] = { type:"vector", length:25, width:8 };
+  // Risk-zone +Add buttons — append a fresh default entry of the
+  // appropriate kind, then re-render the editor for that zone.
+  document.querySelectorAll(".rz-add").forEach(btn=>{
+    btn.addEventListener("click", e=>{
+      const zone = e.currentTarget.dataset.zone;
+      const arrKey = RISK_ZONE_ARRAY_KEYS[zone];
+      if(!ebDraft[arrKey]) ebDraft[arrKey] = [];
+      ebDraft[arrKey].push(_rzNewEntry(zone));
       renderRiskZoneEditor(zone);
       drawShapeCanvas();
     });
@@ -1248,6 +1903,11 @@ function wireElementBuilder(){
     ebStructDraft.doorSwing = parseFloat(e.target.value) || 0;
     drawStructuralCanvas();
   });
+  const sbStc = document.getElementById("sbStcOverride");
+  if(sbStc) sbStc.addEventListener("input", e => {
+    const raw = e.target.value.trim();
+    ebStructDraft.stcOverride = raw === "" ? null : parseFloat(raw);
+  });
   document.getElementById("sbAddShape").addEventListener("click", ()=>{
     ebStructDraft.shapes.push({ type:"rect", x:40, y:40, w:20, h:20 });
     renderStructuralShapeList();
@@ -1258,11 +1918,18 @@ function wireElementBuilder(){
   document.getElementById("amLabel").addEventListener("input", e=>{
     ebAmenityDraft.label = e.target.value;
   });
-  document.getElementById("amSize").addEventListener("input", e=>{
-    ebAmenityDraft.size = builderInputToPct(parseFloat(e.target.value) || 3, "x");
+  document.getElementById("amWidth").addEventListener("input", e=>{
+    ebAmenityDraft.w = builderInputToPct(parseFloat(e.target.value) || 2, "x");
+  });
+  document.getElementById("amHeight").addEventListener("input", e=>{
+    ebAmenityDraft.h = builderInputToPct(parseFloat(e.target.value) || 2, "y");
   });
   document.getElementById("amCoverage").addEventListener("input", e=>{
     ebAmenityDraft.coverage = builderInputToPct(parseFloat(e.target.value) || 0, "x");
+  });
+  const amHasBag = document.getElementById("amHasBag");
+  if(amHasBag) amHasBag.addEventListener("change", e=>{
+    if(ebAmenityDraft) ebAmenityDraft.hasBag = e.target.checked;
   });
 
   // Click outside the modal closes it.
