@@ -414,10 +414,16 @@ function _scIncluded(){
 }
 function _scIsStructural(d){ return d.elementClass === "structural"; }
 function _scIsAmenity(d){ return d.elementClass === "amenity"; }
-// "Tools" = movable, non-structural, non-amenity working elements.
+// True if an element's center is within the active analysis room scope.
+function _scInScope(d){
+  if(typeof pointInAnalysisScope !== "function") return true;
+  const z = state.zones[d.id]; if(!z) return false;
+  return pointInAnalysisScope(z.x + z.w/2, z.y + z.h/2);
+}
+// "Tools" = movable, non-structural, non-amenity working elements, within scope.
 function _scTools(){
   return _scIncluded().filter(d => !d.fixed && !_scIsStructural(d) && !_scIsAmenity(d)
-    && d.cat !== "corridor" && d.cat !== "open");
+    && d.cat !== "corridor" && d.cat !== "open" && _scInScope(d));
 }
 function _scDoors(){
   return _scIncluded().filter(d =>

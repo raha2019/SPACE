@@ -16,15 +16,17 @@ const _simResultCache = {
   egress: null,
   fire:   null,
   noise:  null,
+  fumes:  null,
 };
 
 function getSimScoreContribution() {
-  let adaPenalty = 0, egressPenalty = 0, firePenalty = 0, noisePenalty = 0;
+  let adaPenalty = 0, egressPenalty = 0, firePenalty = 0, noisePenalty = 0, fumesPenalty = 0;
   const details = {
     ada:    "No ADA check run yet.",
     egress: "No egress check run yet.",
     fire:   "No fire-safety check run yet.",
     noise:  "No noise check run yet.",
+    fumes:  "No fumes check run yet.",
   };
 
   const ada = _simResultCache.ada;
@@ -60,12 +62,13 @@ function getSimScoreContribution() {
   if (fire) {
     if (fire.count === 0) {
       firePenalty = 5;
-      details.fire = "No fire extinguishers placed.";
-    } else if (fire.coveragePct < 60) {
-      firePenalty = Math.min(5, Math.ceil((60 - fire.coveragePct) / 12));
-      details.fire = fire.coveragePct.toFixed(1) + "% of floor within extinguisher reach (target ≥ 60%).";
+      details.fire = "No fire extinguishers placed — every tool is at risk.";
+    } else if (fire.beyond > 0 && fire.tools > 0) {
+      firePenalty = Math.min(5, Math.ceil((fire.beyond / fire.tools) * 5));
+      const w = fire.worst && Number.isFinite(fire.worst.d) ? ` (farthest: ${fire.worst.label} ~${fire.worst.d.toFixed(0)} ${fire.unit})` : "";
+      details.fire = `${fire.beyond} of ${fire.tools} tools are a long walk from an extinguisher${w}.`;
     } else {
-      details.fire = fire.coveragePct.toFixed(1) + "% of floor within extinguisher reach.";
+      details.fire = "All tools have quick walking access to an extinguisher.";
     }
   }
 
@@ -78,18 +81,32 @@ function getSimScoreContribution() {
                     (pelFrac * 100).toFixed(1) + "% above PEL.";
   }
 
+  const fumes = _simResultCache.fumes;
+  if (fumes) {
+    if (fumes.sources === 0) {
+      details.fumes = "No fume / odor sources.";
+    } else if (fumes.uncovered > 0) {
+      fumesPenalty = Math.min(8, Math.ceil((fumes.uncovered / fumes.sources) * 8));
+      details.fumes = `${fumes.uncovered} of ${fumes.sources} fume source(s) lack hood capture` +
+        (fumes.worst ? ` (worst: ${fumes.worst.label})` : "") + ".";
+    } else {
+      details.fumes = "All fume sources have hood capture nearby.";
+    }
+  }
+
   return {
     adaPenalty,
     egressPenalty,
     firePenalty,
     noisePenalty,
-    totalPenalty: adaPenalty + egressPenalty + firePenalty + noisePenalty,
+    fumesPenalty,
+    totalPenalty: adaPenalty + egressPenalty + firePenalty + noisePenalty + fumesPenalty,
     details,
   };
 }
 
-const SIM_CANVAS_IDS   = { ada: "simCanvasAda", egress: "simCanvasEgress", fire: "simCanvasFire", noise: "simCanvasNoise" };
-const SIM_CANVAS_ZINDEX = { ada: 10, egress: 11, fire: 13, noise: 12 };
+const SIM_CANVAS_IDS   = { ada: "simCanvasAda", egress: "simCanvasEgress", fire: "simCanvasFire", noise: "simCanvasNoise", fumes: "simCanvasFumes" };
+const SIM_CANVAS_ZINDEX = { ada: 10, egress: 11, fire: 13, noise: 12, fumes: 14 };
 const SIM_RESULTS_ID = "simResults";
 const SIM_CARD_ID    = "simResultsCard";
 
@@ -346,7 +363,7 @@ function _updatePenaltyCard() {
   const body = document.getElementById(SIM_PENALTY_BODY_ID);
   if (!card || !body) return;
 
-  const hasAny = _simResultCache.ada || _simResultCache.egress || _simResultCache.fire || _simResultCache.noise;
+  const hasAny = _simResultCache.ada || _simResultCache.egress || _simResultCache.fire || _simResultCache.noise || _simResultCache.fumes;
   if (!hasAny) { card.style.display = "none"; return; }
 
   const c = getSimScoreContribution();
@@ -357,9 +374,10 @@ function _updatePenaltyCard() {
       _simPenRow("Egress penalty",            c.egressPenalty,  5, 10) +
       _simPenRow("Fire safety penalty",       c.firePenalty,    3,  5) +
       _simPenRow("Noise exposure penalty",    c.noisePenalty,   3,  7) +
+      _simPenRow("Fume exposure penalty",     c.fumesPenalty,   3,  6) +
       '<div class="sim-row" style="border-top:1px solid var(--line);margin-top:4px;padding-top:4px">' +
         "<span><b>Total advisory penalty</b></span>" +
-        "<b>-" + c.totalPenalty + " pts (max -45)</b>" +
+        "<b>-" + c.totalPenalty + " pts (max -53)</b>" +
       "</div>" +
     "</div>" +
     '<div class="sim-section" style="font-size:11px;color:var(--text-mute);line-height:1.6">' +
@@ -367,6 +385,7 @@ function _updatePenaltyCard() {
       "<div>Egress: " + _simEsc(c.details.egress) + "</div>" +
       "<div>Fire: "   + _simEsc(c.details.fire)   + "</div>" +
       "<div>Noise: "  + _simEsc(c.details.noise)  + "</div>" +
+      "<div>Fumes: "  + _simEsc(c.details.fumes)  + "</div>" +
     "</div>" +
     '<div class="sim-disclaimer">Advisory only. Does not modify the main risk score above.</div>';
 }
@@ -398,6 +417,7 @@ function wireSimulations() {
   simGetCanvas("egress");
   simGetCanvas("fire");
   simGetCanvas("noise");
+  simGetCanvas("fumes");
   // Pick up any persisted resolution choice (loaded by loadAppState).
   if(state){
     if(Number.isFinite(state.simResolutionFactor) && state.simResolutionFactor > 0){
@@ -415,6 +435,7 @@ function runSingleSim(name) {
   else if (name === "egress") runEgressCheck();
   else if (name === "fire")   runFireCheck();
   else if (name === "noise")  runNoiseCheck();
+  else if (name === "fumes")  runFumesCheck();
   _updatePenaltyCard();
 }
 
@@ -427,6 +448,7 @@ function runAllSims() {
   runEgressCheck();
   runFireCheck();
   runNoiseCheck();
+  runFumesCheck();
   _runAllActive = false;
   const body = document.getElementById(SIM_RESULTS_ID);
   const card = document.getElementById(SIM_CARD_ID);
@@ -456,6 +478,6 @@ function triggerLiveSim() {
   _simLiveTimer = setTimeout(() => {
     const which = state.analysisLastSim;
     if      (which === "all")    runAllSims();
-    else if (which === "ada" || which === "egress" || which === "fire" || which === "noise") runSingleSim(which);
+    else if (which === "ada" || which === "egress" || which === "fire" || which === "noise" || which === "fumes") runSingleSim(which);
   }, 250);
 }

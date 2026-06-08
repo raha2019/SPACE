@@ -18,6 +18,7 @@ function init(){
   if(typeof initDashboard === "function") initDashboard();
   applySidebarVisibility();
   if(typeof applyLabelsVisibility === "function") applyLabelsVisibility();
+  if(typeof applyToolsOnly === "function") applyToolsOnly();
   // Rebuild preset tabs after restore so user-added alternatives appear.
   if(typeof rebuildTabs === "function") rebuildTabs();
   // Repaint the editable header metadata from restored state.

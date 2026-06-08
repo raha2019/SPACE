@@ -20,6 +20,7 @@ function wireControls(){
   // Switch helper
   function bindSwitch(id, key, after){
     const el = document.getElementById(id);
+    if(!el) return;   // toggle may have been removed from the UI
     if(state[key]) el.classList.add("on");
     el.addEventListener("click",()=>{
       state[key] = !state[key];
@@ -29,10 +30,9 @@ function wireControls(){
     });
   }
   bindSwitch("activeUse","activeUse");
-  bindSwitch("showClearance","showClearance");
-  bindSwitch("showFlow","showFlow");
   bindSwitch("showSidebar","showSidebar", applySidebarVisibility);
   bindSwitch("showLabels","showLabels", applyLabelsVisibility);
+  bindSwitch("showToolsOnly","showToolsOnly", applyToolsOnly);
   bindSwitch("showGrid","showGrid");
 
   // Reset
@@ -205,6 +205,7 @@ function wireAnalysisPanel(){
   bind("simEgressBtn", () => runSim("egress"));
   bind("simFireBtn",   () => runSim("fire"));
   bind("simNoiseBtn",  () => runSim("noise"));
+  bind("simFumesBtn",  () => runSim("fumes"));
   bind("simAllBtn",    () => runSim("all"));
   bind("simClearBtn",  () => {
     if(typeof clearSimOverlays === "function") clearSimOverlays();
@@ -1258,6 +1259,49 @@ function applyLabelsVisibility(){
   // Toggle a body-level flag so the .zone CSS can hide its background /
   // border / shadow (the "boundary") in lockstep with the label.
   document.body.classList.toggle("no-labels", state.showLabels === false);
+}
+
+/* Analysis room-scope selector: checkboxes for each drawn room. Empty
+   selection = all rooms. Re-rendered every render() so it tracks the rooms. */
+function renderAnalysisRooms(){
+  const host = document.getElementById("anRooms");
+  if(!host) return;
+  const floors = (typeof allFloorRooms === "function") ? allFloorRooms() : [];
+  if(!floors.length){
+    host.innerHTML = '<div class="help-text" style="margin:0">No rooms drawn — the whole floor plan is analyzed.</div>';
+    return;
+  }
+  const esc = s => String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+  const sel = Array.isArray(state.analysisRooms) ? state.analysisRooms : [];
+  const allOn = sel.length === 0;
+  let h = `<label class="an-room-chip${allOn?' on':''}"><input type="checkbox" data-room="__all" ${allOn?'checked':''}><span>All rooms</span></label>`;
+  for(const f of floors){
+    const on = allOn || sel.includes(f.id);
+    h += `<label class="an-room-chip${on?' on':''}"><input type="checkbox" data-room="${f.id}" ${on?'checked':''}><span>${esc(f.label||f.id)}</span></label>`;
+  }
+  host.innerHTML = h;
+  host.querySelectorAll('input[data-room]').forEach(cb=>{
+    cb.addEventListener('change', ()=>{
+      const id = cb.dataset.room;
+      if(id === '__all'){
+        state.analysisRooms = [];                       // all rooms
+      } else {
+        let cur = (Array.isArray(state.analysisRooms) && state.analysisRooms.length)
+          ? [...state.analysisRooms] : floors.map(f=>f.id);
+        if(cb.checked){ if(!cur.includes(id)) cur.push(id); }
+        else { cur = cur.filter(x=>x!==id); }
+        state.analysisRooms = (cur.length >= floors.length) ? [] : cur;  // [] = all
+      }
+      renderAnalysisRooms();
+      if(typeof saveAppState === "function") saveAppState();
+      evaluate(); render(true);
+      if(typeof triggerLiveSim === "function") triggerLiveSim();
+    });
+  });
+}
+
+function applyToolsOnly(){
+  document.body.classList.toggle("tools-only", state.showToolsOnly === true);
 }
 
 function applySidebarVisibility(){

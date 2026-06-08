@@ -111,3 +111,19 @@ Implemented now (generic, any layout): **overlap**, **door/exit blockage**, **ki
 - **Clearance/maintenance** footprint of a tool overlapping another tool (can't service it).
 - **Sound-isolation** mismatch: loud tool in a room sharing a low-STC wall with a quiet/beginner room.
 - Conclusion *primary failure mode* = the highest-severity, highest-weight contributor (drives the Conclusion widget text).
+
+## A5b — Path-based Fire-Safety simulation (user spec, 2026-06-07)
+
+Replace the current radius-based extinguisher coverage with a **walking-distance** model:
+
+- Treat every tool/element **and** every fire extinguisher as a **node**. Extinguishers have **no fixed radius**.
+- For each tool, compute the **shortest walkable path** to the nearest extinguisher over the egress walkability grid (obstacles = walls/tools, so the path routes *around* equipment, not through it) — reuse the egress BFS/distance-transform.
+- Risk(tool) = increasing function of that path distance/time (and optionally the tool's flammability). A tool in a far corner with a circuitous route to the only extinguisher reads **red**; one next to an extinguisher reads green.
+- Build the heatmap by **overlaying every tool's risk field** (e.g., each tool contributes a falloff around itself weighted by its path-distance risk; sum/ް max across tools) so the final map shows where a fire would be slowest to reach an extinguisher.
+- No extinguisher present → whole area is high risk. Honors room scope (A1).
+- Implementation: extend `sim_fire.js` (already split from egress) to do multi-source BFS from extinguishers, then per-tool path lookup + accumulation. Flag tools whose nearest-extinguisher path exceeds a threshold (e.g., NFPA travel-distance to an extinguisher).
+
+## Done 2026-06-07
+- **Room-scoped analysis** (A1) implemented: "Run analysis in rooms" chips in the Analysis widget; ADA/egress/noise grids + metrics/flags are masked to the selected room polygons; egress occupant-load uses the scoped room area. ([state.js](v1/js/state.js) helpers, [scoring.js](v1/js/scoring.js), sim_*.js paint loops, [controls.js](v1/js/controls.js) selector.)
+- **Optimize Layout** v1 implemented ([v1/js/optimize.js](v1/js/optimize.js)) — see D-OPT.
+- **Removed** the Clearance Zones toggle (low value) and the Show Circulation toggle (broken on custom layouts; the ADA/Egress sims supersede it).

@@ -119,18 +119,6 @@ function renderZones(){
     // Excluded ("inc" toggle off) → hide entirely from the stage.
     if(z.included === false) continue;
 
-    // Clearance halo (movable, high-risk only, included only)
-    if(state.showClearance && !def.fixed && z.included !== false){
-      const halo = document.createElement("div");
-      halo.className = "clearance";
-      const r = rect(z);
-      const radius = 6 + def.risk * 1.8;
-      halo.style.left = (r.cx - radius)+"%";
-      halo.style.top  = (r.cy - radius)+"%";
-      halo.style.width  = (radius*2)+"%";
-      halo.style.height = (radius*2)+"%";
-      stageEl.appendChild(halo);
-    }
 
     const el = document.createElement("div");
     el.className = `zone r${def.risk} ${def.fixed?"fixed":""}`;
@@ -789,11 +777,11 @@ function render(partial){
     renderZones();
   }
   renderGrid();
-  renderFlowLines();
   renderVectorOverlay();
   renderHeatmap();
   applyZoneFlagDecorations();
   renderMetrics();
+  if(typeof renderAnalysisRooms === "function") renderAnalysisRooms();
   renderFlags();
   renderSummary();
   renderConclusion();

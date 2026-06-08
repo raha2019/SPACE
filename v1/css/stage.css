@@ -271,6 +271,16 @@
    are already display:none via inline style from renderZones().
    Amenities are excluded: their marker (circle + icon) IS the element,
    not a name label, so they stay fully visible. */
+/* "Tools Only" — show just each tool's footprint; hide operator /
+   maintenance / material / kickback risk zones, the principal axis, and the
+   stage-level vector cones. */
+body.tools-only .composite-svg .op,
+body.tools-only .composite-svg .mt,
+body.tools-only .composite-svg .kb,
+body.tools-only .composite-svg .mat,
+body.tools-only .composite-svg .axis{ display:none !important; }
+body.tools-only .vector-overlay{ display:none !important; }
+
 body.no-labels .zone:not(.amenity){
   background:transparent !important;
   border-color:transparent !important;

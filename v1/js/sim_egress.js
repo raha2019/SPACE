@@ -111,7 +111,14 @@ function _egressBFS(grid, cols, rows) {
 }
 
 function _egressOccupantLoad(stageW, stageH) {
-  return Math.ceil((stageW * stageH) / NFPA_OCCUPANT_LOAD_FACTOR_MAKERSPACE);
+  // Use the analysis-scope room area when rooms are selected, otherwise the
+  // whole stage. This stops empty/outside floor area from inflating the load.
+  let area = stageW * stageH;
+  if (typeof analysisScopeAreaUnits === "function") {
+    const a = analysisScopeAreaUnits();
+    if (Number.isFinite(a) && a > 0) area = a;
+  }
+  return Math.ceil(area / NFPA_OCCUPANT_LOAD_FACTOR_MAKERSPACE);
 }
 
 function _egressExitCapacity(stageW) {
@@ -156,8 +163,10 @@ function _egressPaintCanvas(ctx, dist, grid, cols, rows, canvasW, canvasH) {
   const cellW = canvasW / cols;
   const cellH = canvasH / rows;
   const mid = NFPA_MAX_TRAVEL_DISTANCE_FT * 0.5;
+  const scoped = (typeof roomScopeActive === "function") && roomScopeActive();
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
+      if (scoped && !pointInAnalysisScope((c+0.5)/cols*100, (r+0.5)/rows*100)) continue;
       const i = r * cols + c;
       const d = dist[i];
       if (grid[i] === 1) continue; // wall: leave transparent

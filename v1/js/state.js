@@ -11,6 +11,7 @@ const state = {
   showFlow:true,
   showSidebar:true,
   showLabels:true,
+  showToolsOnly:false,
   // X/Y coordinate reference grid on the stage (Layout Builder).
   showGrid:false,
   // Editable header metadata, persisted via autosave + export.
@@ -67,6 +68,9 @@ const state = {
   // Heatmap overlay — null = off, else a METRIC_DEFS key.
   heatmapMetric:null,
   transformPanelPos:null,
+  // Analysis room scope: array of floor element ids to restrict sims/metrics
+  // to. null/empty = all rooms (or whole stage if no rooms drawn).
+  analysisRooms:null,
   // Snap-to-grid dashboard layout: { cols, items:{ widgetId:{x,y,w,h} } }
   // in grid units. null until initDashboard() seeds it from defaults.
   dashboard:null,
@@ -136,6 +140,8 @@ function saveAppState(){
           analysisLive: state.analysisLive,
           analysisLastSim: state.analysisLastSim,
           transformPanelPos: state.transformPanelPos,
+          analysisRooms: state.analysisRooms,
+          showToolsOnly: state.showToolsOnly,
           dashboard: state.dashboard,
           wallTypeColors: state.wallTypeColors,
           metricWeights: state.metricWeights,
@@ -296,6 +302,72 @@ function rectDist(a,b){
   return Math.hypot(dx,dy);
 }
 function dist(ax,ay,bx,by){ return Math.hypot(ax-bx, ay-by); }
+
+/* ------------------------------------------------------------------
+   ROOM-SCOPED ANALYSIS — restrict sims/metrics to selected floor rooms.
+   ------------------------------------------------------------------ */
+// All drawn floor rooms that are currently included.
+function allFloorRooms(){
+  return allZoneDefs().filter(d =>
+    d.elementClass === "structural" && d.subtype === "floor" &&
+    state.zones[d.id] && state.zones[d.id].included !== false);
+}
+// Rooms the analysis should run in: the user's selection, or ALL rooms when
+// nothing is selected. Empty array means "no rooms drawn" → whole stage.
+function getAnalysisRooms(){
+  const floors = allFloorRooms();
+  if(!floors.length) return [];
+  const sel = state.analysisRooms;
+  if(!Array.isArray(sel) || !sel.length) return floors;        // default: all rooms
+  const picked = floors.filter(f => sel.includes(f.id));
+  return picked.length ? picked : floors;
+}
+// A room's outline as stage-% polygon points (local polygon → stage coords).
+function roomPolygonPct(def){
+  const z = state.zones[def.id]; if(!z) return null;
+  const sh = def.shapes && def.shapes[0];
+  if(sh && sh.type === "polygon" && Array.isArray(sh.points)){
+    return sh.points.map(p => ({ x: z.x + (p.x/100)*z.w, y: z.y + (p.y/100)*z.h }));
+  }
+  // bbox fallback
+  return [ {x:z.x,y:z.y}, {x:z.x+z.w,y:z.y}, {x:z.x+z.w,y:z.y+z.h}, {x:z.x,y:z.y+z.h} ];
+}
+function _pointInPolyPct(x, y, pts){
+  let inside = false;
+  for(let i=0, j=pts.length-1; i<pts.length; j=i++){
+    const xi=pts[i].x, yi=pts[i].y, xj=pts[j].x, yj=pts[j].y;
+    if(((yi>y)!==(yj>y)) && (x < (xj-xi)*(y-yi)/((yj-yi)||1e-9) + xi)) inside = !inside;
+  }
+  return inside;
+}
+// True if a stage-% point lies in the analysis scope (selected rooms, or
+// everywhere when no rooms are drawn).
+function pointInAnalysisScope(x, y){
+  const rooms = getAnalysisRooms();
+  if(!rooms.length) return true;                 // no rooms → whole stage
+  for(const f of rooms){
+    const poly = roomPolygonPct(f);
+    if(poly && _pointInPolyPct(x, y, poly)) return true;
+  }
+  return false;
+}
+function roomScopeActive(){ return getAnalysisRooms().length > 0; }
+// Combined area of the analysis-scope rooms in real units² (for occupant
+// load / density). Falls back to whole-stage area when no rooms are drawn.
+function analysisScopeAreaUnits(){
+  const du = stageDimsUnits();
+  const rooms = getAnalysisRooms();
+  if(!rooms.length || !du) return du ? du.w * du.h : null;
+  let aPct = 0;   // shoelace area in %²
+  for(const f of rooms){
+    const poly = roomPolygonPct(f); if(!poly) continue;
+    let s = 0;
+    for(let i=0;i<poly.length;i++){ const a=poly[i], b=poly[(i+1)%poly.length]; s += a.x*b.y - b.x*a.y; }
+    aPct += Math.abs(s)/2;
+  }
+  // %² → units²
+  return (aPct/10000) * du.w * du.h;
+}
 function clamp(v,lo,hi){ return Math.max(lo,Math.min(hi,v)); }
 
 /* Clamp a zone's top-left (x,y) so its ROTATED footprint stays on the stage.

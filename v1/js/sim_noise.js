@@ -174,8 +174,10 @@ function _noisePrecompute(sources, stcGrid, cols, rows, stageW, stageH) {
 function _noisePaintCanvas(ctx, meanDb, cols, rows, canvasW, canvasH) {
   const cellW = canvasW / cols;
   const cellH = canvasH / rows;
+  const scoped = (typeof roomScopeActive === "function") && roomScopeActive();
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
+      if (scoped && !pointInAnalysisScope((c+0.5)/cols*100, (r+0.5)/rows*100)) continue;
       const d = meanDb[r * cols + c];
       if (d >= OSHA_PEL_DBA) {
         ctx.fillStyle = "rgba(220,45,45,0.65)";    // exceeds PEL
@@ -213,23 +215,25 @@ function runNoiseCheck() {
   const stcGrid     = _noiseBuildStcGrid(stageW, stageH, cols, rows);
   const precomputed = _noisePrecompute(sources, stcGrid, cols, rows, stageW, stageH);
 
-  // Accumulate linear pressure squared over all MC iterations.
+  // Deterministic expected sound energy. A machine is simply on or off, so
+  // rather than Monte-Carlo sampling on/off, we sum each source's energy
+  // weighted by its schedule probability (= the closed-form mean the MC was
+  // approximating). prob defaults to 1 (treated as "on").
   const accumulator = new Float64Array(cols * rows);
-  for (let iter = 0; iter < NOISE_MC_ITERATIONS; iter++) {
-    for (let si = 0; si < sources.length; si++) {
-      if (Math.random() > sources[si].prob) continue;
-      const cell = precomputed[si];
-      for (let i = 0; i < accumulator.length; i++) {
-        accumulator[i] += Math.pow(10, cell[i] / 10);
-      }
+  for (let si = 0; si < sources.length; si++) {
+    const w = Number.isFinite(sources[si].prob) ? sources[si].prob : 1;
+    if (w <= 0) continue;
+    const cell = precomputed[si];
+    for (let i = 0; i < accumulator.length; i++) {
+      accumulator[i] += w * Math.pow(10, cell[i] / 10);
     }
   }
 
-  // Convert to mean dB (ambient floor prevents log of zero).
+  // Convert to dB (ambient floor prevents log of zero).
   const ambientLinear = Math.pow(10, NOISE_AMBIENT_DBA / 10);
   const meanDb = new Float32Array(cols * rows);
   for (let i = 0; i < accumulator.length; i++) {
-    meanDb[i] = 10 * Math.log10(accumulator[i] / NOISE_MC_ITERATIONS + ambientLinear);
+    meanDb[i] = 10 * Math.log10(accumulator[i] + ambientLinear);
   }
 
   const canvas = simGetCanvas("noise");

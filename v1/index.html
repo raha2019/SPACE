@@ -147,9 +147,10 @@
           <div class="an-btn-grid">
             <button class="btn ghost an-run" id="simAdaBtn"    title="Corridor width + door clearance vs ADA Standards (2010). Heatmap shows fail / marginal / OK.">♿ ADA</button>
             <button class="btn ghost an-run" id="simEgressBtn" title="Travel distance to nearest exit, occupant load + exit capacity (NFPA 101), dead-ends.">🚪 Egress</button>
-            <button class="btn ghost an-run" id="simFireBtn"   title="Fire-extinguisher reach coverage across the floor.">🧯 Fire</button>
-            <button class="btn ghost an-run" id="simNoiseBtn"  title="Monte-Carlo inverse-square noise map. Sources use each tool's Operating Noise. OSHA bands.">🔊 Noise</button>
-            <button class="btn ghost an-run an-run-all" id="simAllBtn" title="Run ADA, Egress, Fire, and Noise together; all heatmaps render at once.">⚡ Run All</button>
+            <button class="btn ghost an-run" id="simFireBtn"   title="Fire hazard heatmap: each tool's flammability radius vs. fire-extinguisher coverage.">🧯 Fire</button>
+            <button class="btn ghost an-run" id="simNoiseBtn"  title="Inverse-square noise map (deterministic, schedule-weighted). Sources use each tool's Operating Noise. OSHA bands.">🔊 Noise</button>
+            <button class="btn ghost an-run" id="simFumesBtn"  title="Fume / odor dispersion: each tool's smell/fume radius vs. fume-hood capture.">💨 Fumes</button>
+            <button class="btn ghost an-run an-run-all" id="simAllBtn" title="Run ADA, Egress, Fire, Noise, and Fumes together; all heatmaps render at once.">⚡ Run All</button>
           </div>
           <button class="btn ghost an-clear" id="simClearBtn" disabled title="Clear all heatmap overlays and the results below.">Clear overlays</button>
         </div>
@@ -191,14 +192,12 @@
             <span>Active Use Mode</span>
             <div class="switch" id="activeUse"></div>
           </div>
-          <div class="ctrl an-toggle" title="Show clearance halos around movable zones.">
-            <span>Show Clearance Zones</span>
-            <div class="switch" id="showClearance"></div>
-          </div>
-          <div class="ctrl an-toggle" title="Show emergency egress paths and connector corridor centerline.">
-            <span>Show Circulation</span>
-            <div class="switch on" id="showFlow"></div>
-          </div>
+        </div>
+
+        <div class="an-section">
+          <div class="an-label">Run analysis in rooms</div>
+          <div class="an-rooms" id="anRooms"></div>
+          <div class="help-text" style="margin-top:4px">Limit simulations &amp; metrics to the selected room(s). Default = all rooms. With no rooms drawn, the whole floor plan is used.</div>
         </div>
 
         <div class="an-note">All three simulations require a calibrated floor-plan scale (Import Project → calibrate, or Import Floor Plan and click two points).</div>
@@ -241,6 +240,10 @@
           <div class="ctrl stage-toggle" title="Show or hide the element name labels drawn on top of each zone.">
             <span>Labels</span>
             <div class="switch on" id="showLabels"></div>
+          </div>
+          <div class="ctrl stage-toggle" title="Show only each tool's footprint — hide operator / maintenance / material / kickback risk zones and the principal axis.">
+            <span>Tools Only</span>
+            <div class="switch" id="showToolsOnly"></div>
           </div>
           <div class="ctrl stage-toggle" title="Show or hide the Elements sidebar.">
             <span>Sidebar</span>
@@ -657,7 +660,7 @@
           <div class="va-field">
             <label for="ebSchedProb">Schedule probability (0–1)</label>
             <input type="number" id="ebSchedProb" min="0" max="1" step="0.05" placeholder="e.g. 0.5" />
-            <div class="va-help">Fraction of time the tool is actually running. Used by the Monte-Carlo noise simulation.</div>
+            <div class="va-help">Fraction of time the tool is actually running. Weights the tool's contribution in the noise simulation.</div>
           </div>
           <div class="va-field">
             <label for="ebSmell">Smell / Fumes</label>
@@ -991,12 +994,15 @@
 <script src="js/sim_egress.js?v=4"></script>
 <script src="js/sim_fire.js?v=4"></script>
 <script src="js/sim_noise.js?v=4"></script>
+<script src="js/sim_fumes.js?v=4"></script>
 <script src="js/sim_ui.js?v=4"></script>
 <!-- Snap-to-grid dashboard: must load before init.js so initDashboard()
      can place the widgets at boot. -->
 <script src="js/dashboard.js?v=4"></script>
 <!-- Wall / floor-plan drawing editor (replaces the shape-based structural builder). -->
 <script src="js/walldraw.js?v=4"></script>
+<!-- Optimize Layout (constrained simulated annealing). -->
+<script src="js/optimize.js?v=4"></script>
 <script src="js/init.js?v=4"></script>
 </body>
 </html>

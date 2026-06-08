@@ -543,6 +543,12 @@
 .an-clear{width:100%;font-size:11.5px}
 .an-clear:disabled{opacity:.4;cursor:default}
 .an-toggle{justify-content:space-between;width:100%;margin-bottom:8px}
+/* Analysis room-scope chips */
+.an-rooms{display:flex;flex-wrap:wrap;gap:5px}
+.an-room-chip{display:inline-flex;align-items:center;gap:5px;font-size:11px;cursor:pointer;
+  background:var(--panel-2);border:1px solid var(--line);border-radius:5px;padding:3px 7px;color:var(--text-dim)}
+.an-room-chip.on{border-color:var(--accent);color:var(--text);background:var(--panel-3)}
+.an-room-chip input{accent-color:var(--accent);margin:0}
 /* Grid / Labels / Sidebar toggles relocated into the Layout Builder toolbar. */
 .stage-toolbar .stage-toggle{font-size:11px;gap:5px;color:var(--text-dim)}
 .stage-toolbar .stage-toggle .switch{width:30px;height:16px}

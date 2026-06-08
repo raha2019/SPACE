@@ -160,8 +160,10 @@ function _adaPaintCanvas(ctx, dist, cols, rows, canvasW, canvasH) {
   const cellH = canvasH / rows;
   const minCells  = Math.ceil((ADA_MIN_CORRIDOR_WIDTH_IN  / 12) / ADA_GRID_RES_FT / 2);
   const prefCells = Math.ceil((ADA_MIN_PRIMARY_CORRIDOR_IN / 12) / ADA_GRID_RES_FT / 2);
+  const scoped = (typeof roomScopeActive === "function") && roomScopeActive();
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
+      if (scoped && !pointInAnalysisScope((c+0.5)/cols*100, (r+0.5)/rows*100)) continue;
       const d = dist[r * cols + c];
       if (d <= 0) continue;
       if (d < minCells)       ctx.fillStyle = "rgba(220,55,55,0.55)";
