@@ -272,7 +272,7 @@ test("NOISE: inverse square law: dB decreases with distance", () => {
   const stageW = 80, stageH = 50;
   const cols = Math.ceil(stageW / NOISE_GRID_RES_FT);
   const rows = Math.ceil(stageH / NOISE_GRID_RES_FT);
-  const wallGrid = _noiseBuildWallGrid(stageW, stageH, cols, rows);
+  const wallGrid = _noiseBuildStcGrid(stageW, stageH, cols, rows);
   const sources  = _noiseGetSources(stageW, stageH);
   const pre      = _noisePrecompute(sources, wallGrid, cols, rows, stageW, stageH);
 
@@ -338,7 +338,7 @@ test("NOISE: MC iterations produce stable mean at schedule_prob=1.0", () => {
   const stageW = 80, stageH = 50;
   const cols = Math.ceil(stageW / NOISE_GRID_RES_FT);
   const rows = Math.ceil(stageH / NOISE_GRID_RES_FT);
-  const wallGrid = _noiseBuildWallGrid(stageW, stageH, cols, rows);
+  const wallGrid = _noiseBuildStcGrid(stageW, stageH, cols, rows);
   const sources  = _noiseGetSources(stageW, stageH);
   const pre      = _noisePrecompute(sources, wallGrid, cols, rows, stageW, stageH);
 
