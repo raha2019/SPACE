@@ -183,6 +183,13 @@
   box-shadow:0 0 0 2px rgba(255,62,92,.7), 0 4px 14px rgba(0,0,0,.55);
 }
 
+/* measurement tool overlay */
+#measureOverlay .ms-line{stroke:#f5d76e;stroke-width:2;stroke-dasharray:4 2;vector-effect:non-scaling-stroke}
+#measureOverlay .ms-pt{fill:#f5d76e;stroke:#000;stroke-width:1;vector-effect:non-scaling-stroke}
+#measureOverlay .ms-bg{fill:rgba(0,0,0,.78)}
+#measureOverlay .ms-txt{fill:#fff;font-size:11px;font-weight:600;font-family:ui-sans-serif,system-ui,sans-serif}
+.stage.measuring{cursor:crosshair}
+
 /* clearance halo */
 .clearance{
   position:absolute;border-radius:50%;

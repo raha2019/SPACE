@@ -39,25 +39,28 @@ function renderGrid(){
   }
   svg.innerHTML = lines;
   stageEl.appendChild(svg);
+  // Coordinate labels are only meaningful in real units. Without a calibrated
+  // scale, show the gridlines alone (no percent labels) so the layout builder
+  // never displays meaningless percentages.
   const scaled = (typeof hasScale === "function") && hasScale();
-  const fmt = (p, axis) => scaled ? pctToUnits(p, axis).toFixed(0) : p + "%";
+  if(!scaled) return;
   const frag = document.createDocumentFragment();
   for(let p = step; p < 100; p += step){
     const xl = document.createElement("div");
     xl.className = "cg-label cg-x";
     xl.style.left = p + "%";
-    xl.textContent = fmt(p, "x");
+    xl.textContent = pctToUnits(p, "x").toFixed(0);
     frag.appendChild(xl);
     const yl = document.createElement("div");
     yl.className = "cg-label cg-y";
     yl.style.top = p + "%";
-    yl.textContent = fmt(p, "y");
+    yl.textContent = pctToUnits(p, "y").toFixed(0);
     frag.appendChild(yl);
   }
   // Unit marker in the corner.
   const corner = document.createElement("div");
   corner.className = "cg-label cg-origin";
-  corner.textContent = scaled ? (state.scale.unit) : "%";
+  corner.textContent = state.scale.unit;
   frag.appendChild(corner);
   stageEl.appendChild(frag);
 }

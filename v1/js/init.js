@@ -14,6 +14,7 @@ function init(){
   if(typeof wireSimulations === "function") wireSimulations();
   if(typeof wireAnalysisPanel === "function") wireAnalysisPanel();
   if(typeof wireWallDraw === "function") wireWallDraw();
+  if(typeof wireMeasureTool === "function") wireMeasureTool();
   if(typeof wireLeftColResizer === "function") wireLeftColResizer();
   if(typeof initDashboard === "function") initDashboard();
   applySidebarVisibility();
