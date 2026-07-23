@@ -1,0 +1,76 @@
+{
+  "gate": "GATE 4 — Phase 1 robustness (3 seeds × 4000 iters)",
+  "date": "2026-07-05",
+  "iters": 4000,
+  "method": "direct node runs (not via cross_seed_check.mjs execFileSync)",
+  "note": "cross_seed_check.mjs execFileSync timeout (300s) is insufficient for 4000-iter runs on this machine (~7 min per run). Direct background Bash runs used instead. cross_seed_check.mjs timeout updated to 600s for future use.",
+  "determinism": {
+    "seed": "0x4D524443",
+    "runs": 3,
+    "identical": true,
+    "seedvec_json": {"ada": 0.10371186111291054, "egress": 0.3025, "noise": 0.41678004535147395},
+    "stats": {"accepted": 1841, "rejected": 568, "infeasible": 1591, "archived": 96, "finalT": 0.004996}
+  },
+  "seeds": [
+    {
+      "seed": "0x4D524443",
+      "label": "MRDC — canonical, pinned baseline",
+      "iters": 4000,
+      "exitCode": 0,
+      "baseline": {"ada": 10.37, "egress": 30.25, "noise": 41.68},
+      "front_length": 9,
+      "dominating": {"dom": 9, "total": 9},
+      "best_improvements": {"ada_pct": 9.4, "egress_pct": 2.5, "noise_pct": 66.4},
+      "knee": {"ada": 9.67, "egress": 29.50, "noise": 21.77},
+      "infeasible_rate_pct": 39.8,
+      "canary": "PASS",
+      "archive_invariant": "PASS"
+    },
+    {
+      "seed": "0x0001",
+      "label": "alternate seed 1",
+      "iters": 4000,
+      "exitCode": 0,
+      "baseline": {"ada": 10.37, "egress": 30.25, "noise": 39.68},
+      "note_noise": "Noise baseline differs from canonical (39.68 vs 41.68) — noise sim draws from seeded PRNG on initial eval. ADA and egress are seed-independent.",
+      "front_length": 5,
+      "dominating": {"dom": 5, "total": 5},
+      "best_improvements": {"ada_pct": 8.1, "egress_pct": 0.0, "noise_pct": 51.9},
+      "knee": {"ada": 9.83, "egress": 30.25, "noise": 21.86},
+      "infeasible_rate_pct": 40.3,
+      "canary": "PASS (delta_noise=2.00pp < 5pp tol)",
+      "archive_invariant": "PASS"
+    },
+    {
+      "seed": "0xBEEF",
+      "label": "alternate seed 2",
+      "iters": 4000,
+      "exitCode": 0,
+      "baseline": {"ada": 10.37, "egress": 30.25, "noise": 37.37},
+      "note_noise": "Noise baseline differs from canonical (37.37 vs 41.68) — same cause as 0x0001.",
+      "front_length": 12,
+      "dominating": {"dom": 12, "total": 12},
+      "best_improvements": {"ada_pct": 10.3, "egress_pct": 0.8, "noise_pct": 52.5},
+      "knee": {"ada": 9.39, "egress": 30.00, "noise": 23.04},
+      "infeasible_rate_pct": 38.5,
+      "canary": "PASS (delta_noise=4.31pp < 5pp tol — marginal; see FINDINGS.md #4)",
+      "archive_invariant": "PASS"
+    }
+  ],
+  "qualitative_story": {
+    "front_size_range": [5, 12],
+    "all_100pct_dominating": true,
+    "min_best_noise_reduction_pct": 51.9,
+    "max_egress_improvement_pct": 2.5,
+    "story_verdict": "CONSISTENT — all seeds produce fronts with 100% baseline domination, large noise reduction (≥50%), and near-flat egress (≤2.5%)"
+  },
+  "noise_stochasticity_finding": {
+    "canonical_noise_baseline_pct": 41.68,
+    "seed_0x0001_noise_baseline_pct": 39.68,
+    "seed_0xBEEF_noise_baseline_pct": 37.37,
+    "spread_pp": 4.31,
+    "canary_tol_pp": 5.0,
+    "headroom_pp": 0.69,
+    "recommendation": "Investigate and eliminate remaining Math.random() calls in noise evaluator. See FINDINGS.md Known Weakness #4."
+  }
+}

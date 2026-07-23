@@ -1,0 +1,450 @@
+{
+  "schemaVersion": "2.0.0",
+  "meta": {
+    "id": "mrdc2323",
+    "name": "Georgia Tech Invention Studio — MRDC 2323 (frozen v1 pin)",
+    "provenance": {
+      "generatedFrom": [
+        "testcase/hub/default-elements.json",
+        "testcase/hub/default-configuration.json",
+        "testcase/hub/mrdc2323-scale.json"
+      ],
+      "generator": "v2/gen-mrdc2323.mjs",
+      "note": "Byte-exact expression of the frozen MRDC 2323 configuration in the v2 schema. Equivalence to tools/baseline-mrdc2323.json is asserted by v2/equivalence-test.mjs.",
+      "source_drawing": "GT MRDC drawing 1615813303111-2nd_floor_MRDC__3_.pdf"
+    }
+  },
+  "room": {
+    "shape": "polygon",
+    "scale": {
+      "pxPerUnit": 9,
+      "unit": "ft",
+      "widthUnits": 96.6,
+      "heightUnits": 88.6
+    },
+    "stage": {
+      "widthPx": 869.4,
+      "heightPx": 797.4
+    },
+    "floorId": "floor_mrdc2323",
+    "floorLabel": "MRDC 2323 Floor Boundary (L-shaped)",
+    "polygonPct": [
+      {
+        "x": 0,
+        "y": 0
+      },
+      {
+        "x": 100,
+        "y": 0
+      },
+      {
+        "x": 100,
+        "y": 54.85327313769752
+      },
+      {
+        "x": 40.99378881987578,
+        "y": 54.85327313769752
+      },
+      {
+        "x": 40.99378881987578,
+        "y": 100
+      },
+      {
+        "x": 0,
+        "y": 100
+      }
+    ],
+    "verticesUnits": [
+      [
+        0,
+        0
+      ],
+      [
+        96.6,
+        0
+      ],
+      [
+        96.6,
+        48.6
+      ],
+      [
+        39.6,
+        48.6
+      ],
+      [
+        39.6,
+        88.6
+      ],
+      [
+        0,
+        88.6
+      ]
+    ],
+    "structuralBlockers": [
+      {
+        "id": "notch_mrdc2323",
+        "label": "MRDC 2323 SE Notch (outside room)",
+        "elementClass": "structural",
+        "subtype": "wall",
+        "cat": "wall",
+        "blocksMovement": true,
+        "x": 40.99378881987578,
+        "y": 54.85327313769752,
+        "w": 59.00621118012422,
+        "h": 45.14672686230248
+      }
+    ],
+    "notes": {
+      "coordinateSystem": "polygonPct is normalized stage percent (0..100). verticesUnits is feet (documentation).",
+      "shoelaceAreaSf": 6278.76,
+      "seNotch": "x > 40.994% AND y > 54.853% (== x > 39.6 ft, y > 48.6 ft) is excluded; structuralBlockers[0] fills it."
+    }
+  },
+  "machineTypes": {
+    "entrance": {
+      "label": "Entrance",
+      "short": "Entrance",
+      "risk": 0,
+      "fixed": true,
+      "cat": "fixed",
+      "w": 7,
+      "h": 5.5
+    },
+    "mainDesk": {
+      "label": "Main Desk",
+      "short": "Main Desk",
+      "risk": 1,
+      "fixed": true,
+      "cat": "fixed",
+      "beginner": true,
+      "w": 7.5,
+      "h": 5.5,
+      "dba_active": 55
+    },
+    "exitN": {
+      "label": "Emergency Exit North",
+      "short": "Exit N",
+      "risk": 0,
+      "fixed": true,
+      "cat": "exit",
+      "w": 6.5,
+      "h": 4.5
+    },
+    "exitS": {
+      "label": "Emergency Exit South",
+      "short": "Exit S",
+      "risk": 0,
+      "fixed": true,
+      "cat": "exit",
+      "w": 6.5,
+      "h": 4.5
+    },
+    "craftland": {
+      "label": "Craftland",
+      "short": "Craftland",
+      "risk": 1,
+      "beginner": true,
+      "w": 9,
+      "h": 7,
+      "dba_active": 60
+    },
+    "xr": {
+      "label": "XR",
+      "short": "XR",
+      "risk": 1,
+      "beginner": true,
+      "w": 7,
+      "h": 6,
+      "dba_active": 45
+    },
+    "asm1": {
+      "label": "Assembly Tables 1",
+      "short": "Assembly 1",
+      "risk": 2,
+      "beginner": true,
+      "w": 11,
+      "h": 6,
+      "dba_active": 70
+    },
+    "asm2": {
+      "label": "Assembly Tables 2",
+      "short": "Assembly 2",
+      "risk": 2,
+      "beginner": true,
+      "w": 11,
+      "h": 6,
+      "dba_active": 70
+    },
+    "bike": {
+      "label": "Bike / Mechanical",
+      "short": "Bike",
+      "risk": 2,
+      "w": 9,
+      "h": 6,
+      "dba_active": 70
+    },
+    "storage": {
+      "label": "Storage",
+      "short": "Storage",
+      "risk": 2,
+      "w": 9,
+      "h": 7
+    },
+    "electronics": {
+      "label": "Electronics / Soldering",
+      "short": "Electronics",
+      "risk": 3,
+      "w": 9,
+      "h": 6,
+      "dba_active": 45
+    },
+    "print3d": {
+      "label": "3D Printing",
+      "short": "3D Print",
+      "risk": 3,
+      "w": 10,
+      "h": 6,
+      "dba_active": 50
+    },
+    "laser": {
+      "label": "Laser Cutting",
+      "short": "Laser",
+      "risk": 4,
+      "w": 9,
+      "h": 6,
+      "dba_active": 65
+    },
+    "cnc": {
+      "label": "CNC",
+      "short": "CNC",
+      "risk": 4,
+      "w": 9,
+      "h": 7,
+      "dba_active": 103
+    },
+    "metal": {
+      "label": "Metal Room",
+      "short": "Metal",
+      "risk": 4,
+      "w": 10,
+      "h": 7,
+      "dba_active": 91
+    },
+    "wood": {
+      "label": "Wood Room",
+      "short": "Wood",
+      "risk": 4,
+      "w": 10,
+      "h": 7,
+      "dba_active": 105
+    },
+    "welding": {
+      "label": "Welding",
+      "short": "Welding",
+      "risk": 5,
+      "w": 9,
+      "h": 6,
+      "dba_active": 90
+    },
+    "waterjet": {
+      "label": "Waterjet",
+      "short": "Waterjet",
+      "risk": 5,
+      "w": 9,
+      "h": 6,
+      "dba_active": 92
+    },
+    "corridor": {
+      "label": "Main Corridor",
+      "short": "Main Corridor",
+      "risk": 0,
+      "cat": "corridor",
+      "w": 18,
+      "h": 5
+    },
+    "connector": {
+      "label": "Connector Corridor",
+      "short": "Connector",
+      "risk": 0,
+      "cat": "corridor",
+      "w": 8,
+      "h": 14
+    },
+    "rightOpen": {
+      "label": "Right-Side Open Area",
+      "short": "Open Area",
+      "risk": 0,
+      "cat": "open",
+      "w": 18,
+      "h": 14
+    }
+  },
+  "machines": [
+    {
+      "id": "entrance",
+      "type": "entrance",
+      "x": 1.5,
+      "y": 62
+    },
+    {
+      "id": "mainDesk",
+      "type": "mainDesk",
+      "x": 9.5,
+      "y": 60
+    },
+    {
+      "id": "exitN",
+      "type": "exitN",
+      "x": 91.5,
+      "y": 2
+    },
+    {
+      "id": "exitS",
+      "type": "exitS",
+      "x": 91.5,
+      "y": 81
+    },
+    {
+      "id": "craftland",
+      "type": "craftland",
+      "x": 34,
+      "y": 80
+    },
+    {
+      "id": "xr",
+      "type": "xr",
+      "x": 44,
+      "y": 80
+    },
+    {
+      "id": "asm1",
+      "type": "asm1",
+      "x": 18,
+      "y": 48
+    },
+    {
+      "id": "asm2",
+      "type": "asm2",
+      "x": 31,
+      "y": 48
+    },
+    {
+      "id": "bike",
+      "type": "bike",
+      "x": 7,
+      "y": 80
+    },
+    {
+      "id": "storage",
+      "type": "storage",
+      "x": 4,
+      "y": 4
+    },
+    {
+      "id": "electronics",
+      "type": "electronics",
+      "x": 30,
+      "y": 64
+    },
+    {
+      "id": "print3d",
+      "type": "print3d",
+      "x": 18,
+      "y": 30
+    },
+    {
+      "id": "laser",
+      "type": "laser",
+      "x": 32,
+      "y": 38,
+      "w": 9,
+      "h": 6
+    },
+    {
+      "id": "cnc",
+      "type": "cnc",
+      "x": 42,
+      "y": 18
+    },
+    {
+      "id": "metal",
+      "type": "metal",
+      "x": 4,
+      "y": 14
+    },
+    {
+      "id": "wood",
+      "type": "wood",
+      "x": 14,
+      "y": 38,
+      "w": 9,
+      "h": 6
+    },
+    {
+      "id": "welding",
+      "type": "welding",
+      "x": 16,
+      "y": 4
+    },
+    {
+      "id": "waterjet",
+      "type": "waterjet",
+      "x": 28,
+      "y": 4
+    },
+    {
+      "id": "corridor",
+      "type": "corridor",
+      "x": 14,
+      "y": 94,
+      "w": 36,
+      "h": 4
+    },
+    {
+      "id": "connector",
+      "type": "connector",
+      "x": 53,
+      "y": 18,
+      "w": 7,
+      "h": 62
+    },
+    {
+      "id": "rightOpen",
+      "type": "rightOpen",
+      "x": 64,
+      "y": 8,
+      "w": 30,
+      "h": 48
+    }
+  ],
+  "optimization": {
+    "movableIds": [
+      "craftland",
+      "xr",
+      "asm1",
+      "asm2",
+      "bike",
+      "storage",
+      "electronics",
+      "print3d",
+      "laser",
+      "cnc",
+      "metal",
+      "wood",
+      "welding",
+      "waterjet"
+    ],
+    "seed": "0x4D524443",
+    "iters": 4000,
+    "objectiveWeights": {
+      "ada": 0.3333333333333333,
+      "egress": 0.3333333333333333,
+      "noise": 0.3333333333333333
+    }
+  },
+  "adjacency": [],
+  "ruleModes": {
+    "adjacency": "advisory",
+    "clearance": "advisory"
+  }
+}

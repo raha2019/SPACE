@@ -37,6 +37,24 @@ function simShowError() {}
 function simShowAdaResults() {}
 function simShowEgressResults() {}
 function simShowNoiseResults() {}
+function _simEsc(s) {
+  return String(s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+</script>
+
+<!-- Eval harness and optimizer (loaded after sim modules, before tests) -->
+<script src="../v1/js/sim_eval.js"></script>
+<script src="../v1/js/sim_optimizer.js"></script>
+
+<!-- Stub out optimizer UI functions that require a live DOM -->
+<script>
+function _setOptButtonState() {}
+function _showOptProgress() {}
+function _showOptError(msg) {}
+function _showOptResults() {}
+function _drawGhostOverlay() {}
+function wireOptimizer() {}
 </script>
 
 <!-- Test suite (defines its own state stubs, then runs tests) -->

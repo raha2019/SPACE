@@ -1,0 +1,31 @@
+{
+  "gate": "GATE 1",
+  "pass": false,
+  "config": "MRDC 2323 (real geometry)",
+  "scale": {
+    "pxPerUnit": 9,
+    "unit": "ft",
+    "stageWidthPx": 869.4,
+    "stageHeightPx": 797.4
+  },
+  "checks": {},
+  "snapshots": {},
+  "moves": {},
+  "mosaTable": null,
+  "mosaTable2": null,
+  "restoreSemantics": null,
+  "consoleErrors": [],
+  "consoleWarnings": [],
+  "allConsoleMessages": [],
+  "optimizeConsole": [],
+  "dialogs": [],
+  "shots": {
+    "00-before.png": 244626,
+    "01-front.png": 255956,
+    "02-applied.png": 199245,
+    "03-final.png": 255946
+  },
+  "timestamp": "2026-07-13T01:12:32.847Z",
+  "error": "browserType.launch: Executable doesn't exist at /sessions/charming-youthful-pascal/.cache/ms-playwright/chromium_headless_shell-1228/chrome-headless-shell-linux64/chrome-headless-shell\n╔════════════════════════════════════════════════════════════╗\n║ Looks like Playwright was just installed or updated.       ║\n║ Please run the following command to download new browsers: ║\n║                                                            ║\n║     npx playwright install                                 ║\n║                                                            ║\n║ <3 Playwright Team                                         ║\n╚════════════════════════════════════════════════════════════╝",
+  "errorStack": "browserType.launch: Executable doesn't exist at /sessions/charming-youthful-pascal/.cache/ms-playwright/chromium_headless_shell-1228/chrome-headless-shell-linux64/chrome-headless-shell\n╔════════════════════════════════════════════════════════════╗\n║ Looks like Playwright was just installed or updated.       ║\n║ Please run the following command to download new browsers: ║\n║                                                            ║\n║     npx playwright install                                 ║\n║                                                            ║\n║ <3 Playwright Team                                         ║\n╚════════════════════════════════════════════════════════════╝\n    at runGate1 (/sessions/charming-youthful-pascal/mnt/SPACE/tools/verify_phase1.mjs:315:30)\n    at async file:///sessions/charming-youthful-pascal/mnt/SPACE/tools/verify_phase1.mjs:635:17"
+}

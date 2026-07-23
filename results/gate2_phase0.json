@@ -1,0 +1,143 @@
+{
+  "gate": "GATE 2",
+  "pass": true,
+  "bitForBitIdentical": true,
+  "canaryStillPasses": true,
+  "allStoryPass": true,
+  "seeds": [
+    {
+      "seed": "0x4D524443",
+      "label": "0x4D524443 (MRDC — canonical)",
+      "exitCode": 0,
+      "parsed": {
+        "archiveSize": 10,
+        "dominating": {
+          "dom": 9,
+          "total": 10
+        },
+        "baselineAda": 11.49,
+        "baselineEgress": 29.75,
+        "baselineNoise": 45.63,
+        "kneeAda": {
+          "from": 11.49,
+          "to": 11.02
+        },
+        "kneeEgress": {
+          "from": 29.75,
+          "to": 29.5
+        },
+        "kneeNoise": {
+          "from": 45.63,
+          "to": 27.89
+        },
+        "bestAda": 9.6,
+        "bestEgress": 0.8,
+        "bestNoise": 48.6,
+        "iters": 1120,
+        "accepted": 488,
+        "infeasible": 461,
+        "canaryPass": true,
+        "canaryFail": false,
+        "archiveFail": false
+      }
+    },
+    {
+      "seed": "0x0001",
+      "label": "0x0001",
+      "exitCode": 0,
+      "parsed": {
+        "archiveSize": 13,
+        "dominating": {
+          "dom": 12,
+          "total": 13
+        },
+        "baselineAda": 11.49,
+        "baselineEgress": 29.75,
+        "baselineNoise": 43.26,
+        "kneeAda": {
+          "from": 11.49,
+          "to": 10.57
+        },
+        "kneeEgress": {
+          "from": 29.75,
+          "to": 29.5
+        },
+        "kneeNoise": {
+          "from": 43.26,
+          "to": 24.21
+        },
+        "bestAda": 12.7,
+        "bestEgress": 2.5,
+        "bestNoise": 54,
+        "iters": 1120,
+        "accepted": 533,
+        "infeasible": 429,
+        "canaryPass": true,
+        "canaryFail": false,
+        "archiveFail": false
+      }
+    },
+    {
+      "seed": "0xBEEF",
+      "label": "0xBEEF",
+      "exitCode": 0,
+      "parsed": {
+        "archiveSize": 12,
+        "dominating": {
+          "dom": 12,
+          "total": 12
+        },
+        "baselineAda": 11.49,
+        "baselineEgress": 29.75,
+        "baselineNoise": 40.89,
+        "kneeAda": {
+          "from": 11.49,
+          "to": 10.85
+        },
+        "kneeEgress": {
+          "from": 29.75,
+          "to": 29.25
+        },
+        "kneeNoise": {
+          "from": 40.89,
+          "to": 26.21
+        },
+        "bestAda": 9.9,
+        "bestEgress": 1.7,
+        "bestNoise": 46.7,
+        "iters": 1120,
+        "accepted": 512,
+        "infeasible": 438,
+        "canaryPass": true,
+        "canaryFail": false,
+        "archiveFail": false
+      }
+    }
+  ],
+  "storyChecks": [
+    {
+      "seed": "0x4D524443",
+      "frontOk": true,
+      "domOk": true,
+      "noiseOk": true,
+      "egressFlat": true,
+      "allOk": true
+    },
+    {
+      "seed": "0x0001",
+      "frontOk": true,
+      "domOk": true,
+      "noiseOk": true,
+      "egressFlat": true,
+      "allOk": true
+    },
+    {
+      "seed": "0xBEEF",
+      "frontOk": true,
+      "domOk": true,
+      "noiseOk": true,
+      "egressFlat": true,
+      "allOk": true
+    }
+  ]
+}

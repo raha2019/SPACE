@@ -426,6 +426,15 @@ function wireSimulations() {
       setSimResolution(state.simResolution);
     }
   }
+
+  // Wire MOSA button (Task 3).
+  const mosaBtnEl = document.getElementById('simMosaBtn');
+  if (mosaBtnEl) mosaBtnEl.addEventListener('click', _runMosa);
+
+  // Delegate Apply / Restore clicks from the MOSA results table (Task 4).
+  // Added once here so it survives innerHTML replacements in the results card.
+  const simResBody = document.getElementById(SIM_RESULTS_ID);
+  if (simResBody) simResBody.addEventListener('click', _mosaResultClick);
 }
 
 function runSingleSim(name) {
@@ -480,4 +489,211 @@ function triggerLiveSim() {
     if      (which === "all")    runAllSims();
     else if (which === "ada" || which === "egress" || which === "fire" || which === "noise" || which === "fumes") runSingleSim(which);
   }, 250);
+}
+
+/* ------------------------------------------------------------------
+   MOSA (Multi-Objective Simulated Annealing) — Tasks 3 and 4.
+   Requires sim_eval.js and sim_mosa.js loaded before sim_ui.js.
+   ------------------------------------------------------------------ */
+
+// Module-level state shared between _runMosa, _renderMosaFront, _mosaResultClick.
+let _mosaCurrentFront = null;  // last Pareto front (array of {pos, vec})
+let _mosaCurrentSnap  = null;  // zone snapshot taken just before the run
+
+/* Task 3: button handler — show indicator, defer 50 ms, run SA, render. */
+function _runMosa() {
+  if (typeof mosaOptimize !== 'function') {
+    simShowError('MOSA optimizer not loaded. Check that sim_eval.js and sim_mosa.js are included in index.html.');
+    return;
+  }
+  const du = (typeof stageDimsUnits === 'function') ? stageDimsUnits() : null;
+  if (!du || !(du.w > 0) || !(du.h > 0)) {
+    simShowError('MOSA needs a calibrated floor-plan scale. Import a project first.');
+    return;
+  }
+
+  // Busy indicator — button label + message in results card.
+  const btn = document.getElementById('simMosaBtn');
+  const origLabel = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = 'Running MOSA…'; }
+  const resBody = document.getElementById(SIM_RESULTS_ID);
+  const resCard = document.getElementById(SIM_CARD_ID);
+  if (resBody) resBody.innerHTML =
+    '<div class="sim-row" style="color:var(--text-dim)">Running MOSA optimizer—please wait…</div>';
+  if (resCard) resCard.style.display = '';
+
+  // 50 ms deferral so the indicator paints before the synchronous SA loop.
+  setTimeout(function () {
+    // Capture pre-run zone positions (mosaOptimize restores them internally,
+    // so this snapshot equals post-run state — it is what "Restore original" returns to).
+    const snap = {};
+    for (const id in state.zones) {
+      const z = state.zones[id];
+      snap[id] = { x: z.x, y: z.y, rotation: z.rotation || 0 };
+    }
+
+    let result;
+    try {
+      // Call with no movableIds so mosaOptimize uses _scTools() (current selection).
+      // Pass opts.seed only if state.mosaSeed is explicitly set (default: unseeded).
+      const opts = {};
+      if (state && state.mosaSeed !== undefined) opts.seed = state.mosaSeed;
+      result = mosaOptimize(opts);
+    } catch (err) {
+      if (resBody) resBody.innerHTML =
+        '<div class="sim-error">MOSA error: ' + _simEsc(String(err.message || err)) + '</div>';
+      if (btn) { btn.disabled = false; btn.textContent = origLabel; }
+      return;
+    }
+
+    if (btn) { btn.disabled = false; btn.textContent = origLabel; }
+
+    if (!result || !result.front || result.front.length === 0) {
+      const why = (result && result.stats && result.stats.error) ? ' (' + result.stats.error + ')' : '';
+      if (resBody) resBody.innerHTML =
+        '<div class="sim-error">MOSA: no feasible Pareto solutions found' + why +
+        '. Ensure at least 2 unlocked, included tools are on the stage with a calibrated scale.</div>';
+      return;
+    }
+
+    _renderMosaFront(result, snap);
+  }, 50);
+}
+
+/* Task 4: render the Pareto front table into the simulation results card. */
+function _renderMosaFront(result, snap) {
+  _mosaCurrentFront = result.front;
+  _mosaCurrentSnap  = snap;
+
+  const front   = result.front;
+  const seedVec = result.seedVec;
+  const stats   = result.stats;
+
+  // Knee point: min-max normalize across front, then find closest to ideal (all-zero).
+  function _mm(key) {
+    let lo = Infinity, hi = -Infinity;
+    for (const p of front) {
+      if (p.vec[key] < lo) lo = p.vec[key];
+      if (p.vec[key] > hi) hi = p.vec[key];
+    }
+    return { lo, hi };
+  }
+  const rA = _mm('ada'), rE = _mm('egress'), rN = _mm('noise');
+  const nrm = (v, r) => r.hi > r.lo ? (v - r.lo) / (r.hi - r.lo) : 0;
+  let kneeIdx = 0, kd = Infinity;
+  for (let i = 0; i < front.length; i++) {
+    const d = Math.hypot(
+      nrm(front[i].vec.ada,    rA),
+      nrm(front[i].vec.egress, rE),
+      nrm(front[i].vec.noise,  rN)
+    );
+    if (d < kd) { kd = d; kneeIdx = i; }
+  }
+
+  const f2 = v => (v * 100).toFixed(2) + '%';
+
+  let h = '<div class="sim-header">' +
+    '<span class="sim-title">MOSA Pareto Front</span>' +
+    '<span class="sim-badge sim-pass">' + front.length + ' solutions</span>' +
+    '</div>' +
+    '<div class="sim-disclaimer">Preliminary model estimate. Not for regulatory use.</div>';
+
+  // Diagnostics line.
+  h += '<div class="sim-section" style="font-size:10.5px;color:var(--text-dim)">' +
+    stats.iters + ' iters \xb7 ' + stats.accepted + ' accepted \xb7 ' +
+    stats.archived + ' archived \xb7 T<sub>f</sub>=' + stats.finalT.toExponential(2) +
+    '</div>';
+
+  // Baseline row.
+  h += '<div class="sim-section">';
+  h += '<div style="font-size:11px;font-weight:600;margin-bottom:4px">Baseline (current layout)</div>';
+  h += '<table style="width:100%;font-size:11px;border-collapse:collapse">';
+  h += '<tr><td style="color:var(--text-dim);padding:2px 0">ADA</td>' +
+    '<td style="text-align:right;padding:2px 0">' + f2(seedVec.ada) + '</td></tr>';
+  h += '<tr><td style="color:var(--text-dim);padding:2px 0">Egress</td>' +
+    '<td style="text-align:right;padding:2px 0">' + f2(seedVec.egress) + '</td></tr>';
+  h += '<tr><td style="color:var(--text-dim);padding:2px 0">Noise</td>' +
+    '<td style="text-align:right;padding:2px 0">' + f2(seedVec.noise) + '</td></tr>';
+  h += '</table></div>';
+
+  // Pareto front table with Apply buttons and single Restore button.
+  h += '<div class="sim-section">';
+  h += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">';
+  h += '<span style="font-size:11px;font-weight:600;flex:1">Pareto front (' + front.length + ')</span>';
+  h += '<button class="btn ghost" id="mosRestoreBtn" ' +
+    'style="font-size:10.5px;padding:2px 8px">↩ Restore original</button>';
+  h += '</div>';
+
+  h += '<table style="width:100%;font-size:11px;border-collapse:collapse">';
+  h += '<thead><tr style="border-bottom:1px solid var(--line);color:var(--text-dim)">' +
+    '<th style="text-align:left;padding:2px 4px;font-weight:500">#</th>' +
+    '<th style="text-align:right;padding:2px 4px;font-weight:500">ADA</th>' +
+    '<th style="text-align:right;padding:2px 4px;font-weight:500">Egress</th>' +
+    '<th style="text-align:right;padding:2px 4px;font-weight:500">Noise</th>' +
+    '<th style="padding:2px 4px"></th>' +
+    '</tr></thead><tbody>';
+
+  for (let i = 0; i < front.length; i++) {
+    const pt     = front[i];
+    const isKnee = (i === kneeIdx);
+    const bg     = isKnee ? 'background:rgba(90,169,255,.08);' : '';
+    const lb     = isKnee ? 'border-left:2px solid rgba(90,169,255,.6);'
+                           : 'border-left:2px solid transparent;';
+    h += '<tr style="' + bg + lb + '">';
+    h += '<td style="padding:3px 4px;color:var(--text-dim)">' +
+      (isKnee ? '★ ' : '') + (i + 1) + '</td>';
+    h += '<td style="text-align:right;padding:3px 4px">' + f2(pt.vec.ada)    + '</td>';
+    h += '<td style="text-align:right;padding:3px 4px">' + f2(pt.vec.egress) + '</td>';
+    h += '<td style="text-align:right;padding:3px 4px">' + f2(pt.vec.noise)  + '</td>';
+    h += '<td style="padding:3px 4px">' +
+      '<button class="btn ghost" data-mosa-idx="' + i + '" ' +
+      'style="font-size:10px;padding:2px 6px">Apply</button></td>';
+    h += '</tr>';
+  }
+
+  h += '</tbody></table>';
+  h += '<div style="font-size:10px;color:var(--text-dim);margin-top:4px">' +
+    '★ = knee point (closest to ideal after min-max normalization)</div>';
+  h += '</div>';
+
+  const resBody = document.getElementById(SIM_RESULTS_ID);
+  const resCard = document.getElementById(SIM_CARD_ID);
+  if (resBody) resBody.innerHTML = h;
+  if (resCard) resCard.style.display = '';
+}
+
+/* Task 4: delegated click handler wired once in wireSimulations().
+   Handles Apply (data-mosa-idx) and Restore (#mosRestoreBtn) clicks
+   even after resBody.innerHTML is replaced between runs. */
+function _mosaResultClick(e) {
+  // Apply a specific Pareto front member to state.zones.
+  const applyBtn = e.target.closest && e.target.closest('[data-mosa-idx]');
+  if (applyBtn && _mosaCurrentFront) {
+    const idx = parseInt(applyBtn.dataset.mosaIdx, 10);
+    const pt  = _mosaCurrentFront[idx];
+    if (!pt || !pt.pos) return;
+    for (const id in pt.pos) {
+      if (state.zones[id]) {
+        state.zones[id].x        = pt.pos[id].x;
+        state.zones[id].y        = pt.pos[id].y;
+        state.zones[id].rotation = pt.pos[id].rotation;
+      }
+    }
+    if (typeof evaluate === 'function') evaluate();
+    if (typeof render   === 'function') render();
+    return;
+  }
+  // Restore: write the pre-run snapshot back to state.zones.
+  if (e.target.id === 'mosRestoreBtn' && _mosaCurrentSnap) {
+    for (const id in _mosaCurrentSnap) {
+      if (state.zones[id]) {
+        state.zones[id].x        = _mosaCurrentSnap[id].x;
+        state.zones[id].y        = _mosaCurrentSnap[id].y;
+        state.zones[id].rotation = _mosaCurrentSnap[id].rotation;
+      }
+    }
+    if (typeof evaluate === 'function') evaluate();
+    if (typeof render   === 'function') render();
+    return;
+  }
 }

@@ -1,0 +1,26 @@
+{
+  "boundary": {
+    "source": "GT MRDC drawing 1615813303111-2nd_floor_MRDC__3_.pdf, scale 9pts/ft",
+    "area_sf": 6235,
+    "shoelace_sf": 6275,
+    "tolerance_pct": 0.6,
+    "note": "L-shaped polygon. SE 9ft diagonal notch simplified to right angle. West L-jog = 39.6ft wide x 40ft deep. Doors unverified pending field visit.",
+    "vertices_ft": [
+      [0.0,  0.0],
+      [96.6, 0.0],
+      [96.6, 48.6],
+      [39.6, 48.6],
+      [39.6, 88.6],
+      [0.0,  88.6]
+    ],
+    "doors": [
+      {"wall": "north", "x_ft": 33.0, "width_ft": 6.0,  "verified": false, "note": "main entry from 2303 corridor, x estimated"},
+      {"wall": "east",  "y_ft": 10.0, "width_ft": 3.5,  "verified": false, "note": "east wall door 1, y estimated from drawing"},
+      {"wall": "east",  "y_ft": 28.0, "width_ft": 3.5,  "verified": false, "note": "east wall door 2, y estimated from drawing"},
+      {"wall": "east",  "y_ft": 46.0, "width_ft": 3.5,  "verified": false, "note": "east wall door 3, y estimated from drawing"}
+    ]
+  },
+  "stations": [],
+  "_stations_note": "Empty -- requires Matterport scan or field measurement. See T1.2.",
+  "coordinate_system": "origin NW corner, x=east, y=south, units=feet, BFS grid at 1ft resolution"
+}

@@ -156,6 +156,11 @@
         </div>
 
         <div class="an-section">
+          <div class="an-label">Pareto optimizer</div>
+          <button class="btn ghost an-run" id="simMosaBtn" title="Multi-objective simulated annealing (MOSA): finds a Pareto front of layouts balancing ADA, Egress, and Noise objectives. Results appear in Simulation Results. Blocks the UI briefly during the search (~1 s at default iteration count).">🎯 Run MOSA (Pareto)</button>
+        </div>
+
+        <div class="an-section">
           <div class="an-label">Options</div>
           <div class="ctrl an-toggle" title="Re-run the last analysis automatically after every layout change.">
             <span>Live mode</span>
@@ -999,6 +1004,12 @@
 <script src="js/sim_fire.js?v=4"></script>
 <script src="js/sim_noise.js?v=4"></script>
 <script src="js/sim_fumes.js?v=4"></script>
+<!-- Headless evaluation and MOSA optimizer loaded here so evaluateLayout,
+     evalDominates, and mosaOptimize are available to sim_ui.js at wire time.
+     Load order: sim_ada/egress/noise must precede sim_eval; sim_eval must
+     precede sim_mosa. sim_optimizer.js is NOT loaded (unwired, Phase 5). -->
+<script src="js/sim_eval.js?v=4"></script>
+<script src="js/sim_mosa.js?v=4"></script>
 <script src="js/sim_ui.js?v=4"></script>
 <!-- Snap-to-grid dashboard: must load before init.js so initDashboard()
      can place the widgets at boot. -->

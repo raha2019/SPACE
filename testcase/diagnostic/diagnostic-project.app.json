@@ -1,0 +1,219 @@
+{
+  "kind": "project",
+  "name": "SPACE Diagnostic — App Fixture (degraded; import via wizard)",
+  "description": "Degraded v1-import version of testcase/diagnostic/diagnostic-plan.v2.json. Import via SPACE -> Import Project wizard: (1) pick diagnostic-floorplan.svg, (2) calibrate scale by clicking marker A then marker B and entering 60 ft, (3) pick this file. LOST vs the v2 fixture (the app format cannot carry these): interior zone walls + the bridge door, the 3-zone partition as DATA (only shown in the image), all hazard flags, all clearance zones, all amenity links, and occupancy. The intentional ADA pinch (tsaw/wjet ~2 ft gap) and the unreachable zone C survive only as geometry the user must read off the image. See README.md.",
+  "calibration": {
+    "imageFile": "diagnostic-floorplan.svg",
+    "pointA": "marker A (top-left, 0 ft)",
+    "pointB": "marker B (top-right, 60 ft)",
+    "enterDistance": 60,
+    "unit": "ft",
+    "pxPerUnitExpected": 15
+  },
+  "elementDefs": [
+    {
+      "id": "p3d",
+      "label": "3D Printer (FDM)",
+      "short": "3DP",
+      "risk": 1,
+      "fixed": false,
+      "cat": "",
+      "w": 4,
+      "h": 4,
+      "dba_active": 50
+    },
+    {
+      "id": "elec",
+      "label": "Electronics / Soldering Bench",
+      "short": "Elec",
+      "risk": 2,
+      "fixed": false,
+      "cat": "",
+      "w": 6,
+      "h": 4,
+      "dba_active": 45
+    },
+    {
+      "id": "sander",
+      "label": "Belt/Disc Sander",
+      "short": "Sander",
+      "risk": 3,
+      "fixed": false,
+      "cat": "",
+      "w": 4,
+      "h": 4,
+      "dba_active": 90
+    },
+    {
+      "id": "tsaw",
+      "label": "Table Saw",
+      "short": "TSaw",
+      "risk": 5,
+      "fixed": false,
+      "cat": "",
+      "w": 6,
+      "h": 5,
+      "dba_active": 105
+    },
+    {
+      "id": "wjet",
+      "label": "Waterjet Cutter",
+      "short": "WJet",
+      "risk": 4,
+      "fixed": false,
+      "cat": "",
+      "w": 6,
+      "h": 5,
+      "dba_active": 92
+    },
+    {
+      "id": "weld",
+      "label": "Welding Station",
+      "short": "Weld",
+      "risk": 5,
+      "fixed": false,
+      "cat": "",
+      "w": 6,
+      "h": 5,
+      "dba_active": 90
+    },
+    {
+      "id": "laser",
+      "label": "Laser Cutter",
+      "short": "Laser",
+      "risk": 4,
+      "fixed": false,
+      "cat": "",
+      "w": 6,
+      "h": 5,
+      "dba_active": 65
+    },
+    {
+      "id": "grind",
+      "label": "Bench Grinder",
+      "short": "Grind",
+      "risk": 4,
+      "fixed": false,
+      "cat": "",
+      "w": 3,
+      "h": 3,
+      "dba_active": 95
+    },
+    {
+      "id": "fireExt1",
+      "label": "Fire Extinguisher",
+      "short": "FireExt",
+      "risk": 0,
+      "fixed": true,
+      "cat": "amenity",
+      "w": 1,
+      "h": 1
+    },
+    {
+      "id": "eyewash1",
+      "label": "Eyewash Station",
+      "short": "Eyewash",
+      "risk": 0,
+      "fixed": true,
+      "cat": "amenity",
+      "w": 1,
+      "h": 1
+    },
+    {
+      "id": "exitA",
+      "label": "Exit A (North, Zone A)",
+      "short": "Exit A",
+      "risk": 0,
+      "fixed": true,
+      "cat": "exit",
+      "w": 5,
+      "h": 4
+    },
+    {
+      "id": "exitB",
+      "label": "Exit B (East, Zone B)",
+      "short": "Exit B",
+      "risk": 0,
+      "fixed": true,
+      "cat": "exit",
+      "w": 5,
+      "h": 7
+    }
+  ],
+  "zones": {
+    "p3d": {
+      "x": 30,
+      "y": 8
+    },
+    "elec": {
+      "x": 8,
+      "y": 35
+    },
+    "sander": {
+      "x": 20,
+      "y": 35
+    },
+    "tsaw": {
+      "x": 70,
+      "y": 20
+    },
+    "wjet": {
+      "x": 70,
+      "y": 30
+    },
+    "weld": {
+      "x": 78,
+      "y": 18
+    },
+    "laser": {
+      "x": 85,
+      "y": 45
+    },
+    "grind": {
+      "x": 95,
+      "y": 60
+    },
+    "fireExt1": {
+      "x": 68,
+      "y": 12
+    },
+    "eyewash1": {
+      "x": 5,
+      "y": 5
+    },
+    "exitA": {
+      "x": 20,
+      "y": 0
+    },
+    "exitB": {
+      "x": 95,
+      "y": 25
+    }
+  },
+  "regions": [
+    {
+      "label": "Zone A (reachable, 750 sf)",
+      "x": 0,
+      "y": 0,
+      "w": 50,
+      "h": 62.5,
+      "color": "rgba(90,169,255,.05)"
+    },
+    {
+      "label": "Zone B (reachable, 1020 sf)",
+      "x": 50,
+      "y": 0,
+      "w": 50,
+      "h": 70,
+      "color": "rgba(120,200,120,.05)"
+    },
+    {
+      "label": "Zone C (UNREACHABLE, 450 sf)",
+      "x": 0,
+      "y": 62.5,
+      "w": 50,
+      "h": 37.5,
+      "color": "rgba(220,80,80,.06)"
+    }
+  ]
+}

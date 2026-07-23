@@ -1,0 +1,14 @@
+{
+  "_note": "T1.3 -- every entry requires a manufacturer spec sheet OR on-site measurement. Never use proxy/estimated dBA values. Document source for each.",
+  "sources": [
+    {
+      "station_id": "PLACEHOLDER",
+      "name": "Example: Laser Cutter",
+      "dba_at_1m": null,
+      "source_type": null,
+      "source_doc": null,
+      "measured_date": null,
+      "verified": false
+    }
+  ]
+}

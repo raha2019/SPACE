@@ -1,0 +1,514 @@
+{
+  "$comment": "v2 Phase E1 starter library of standard makerspace machines, populated with the element attributes specified in v2/ELEMENT_ATTRIBUTES.md. Each entry is a machineType conforming to schema/space-project.v2.json (2.1.0). EVERY numeric value carries provenance: top-level/grouped numerics via the per-machine `provenance` map (keyed by attribute or group); clearanceZones and amenityLinks carry an inline `provenance` string. No value uses provenance 'unknown' — standards are cited where they exist, otherwise 'design assumption' with a note. dba_active values match the SPACE frozen project where a corresponding zone exists and are otherwise approximate NIOSH power-tool noise levels; they are NOT re-derived. FORWARD-LOOKING: no objective consumes any of these yet (dba_active/schedule_prob aside).",
+  "schemaTarget": "space-project.v2.json#/$defs/machineType (schemaVersion 2.1.0)",
+  "provenanceLegend": {
+    "standardTokens": ["OSHA", "NFPA", "ANSI", "Z358", "ADA", "NIOSH", "NEC", "ACGIH"],
+    "designAssumption": "design assumption",
+    "note": "Task 4b tallies how many numeric values are standard-cited vs design-assumption."
+  },
+  "machineTypes": {
+    "tableSaw": {
+      "label": "Table Saw", "short": "TSaw", "w": 6, "h": 5, "risk": 5,
+      "dba_active": 105, "schedule_prob": 0.3,
+      "principalAxis": { "angle": 0, "length": 40 },
+      "hazards": { "dustProducing": true },
+      "ventilation": { "localExhaustRequired": true, "cfm": 350, "requiresExteriorWallOrDuct": false },
+      "power": { "volts": 240, "amps": 15, "phase": 1 },
+      "occupancy": { "operatorCount": 1, "personSpaceAreaUnits": 15, "footprintsMayOverlap": false },
+      "clearanceZones": [
+        { "id": "infeed", "type": "infeedCorridor", "severity": "hard",
+          "geometry": { "kind": "template", "template": "rect", "params": { "offsetUnits": 0, "alongUnits": 8, "acrossUnits": 3 } },
+          "orientation": { "relativeTo": "principalAxis", "angleDeg": 180 },
+          "provenance": "OSHA 1910.213 (woodworking machinery); stock length = design assumption" },
+        { "id": "outfeed", "type": "outfeedCorridor", "severity": "hard",
+          "geometry": { "kind": "template", "template": "rect", "params": { "offsetUnits": 0, "alongUnits": 8, "acrossUnits": 3 } },
+          "orientation": { "relativeTo": "principalAxis", "angleDeg": 0 },
+          "provenance": "OSHA 1910.213; stock length = design assumption" },
+        { "id": "kickback", "type": "kickbackCone", "severity": "hard",
+          "geometry": { "kind": "template", "template": "cone", "params": { "apexOffsetUnits": 0, "spreadDeg": 20, "lengthUnits": 12 } },
+          "orientation": { "relativeTo": "principalAxis", "angleDeg": 180 },
+          "provenance": "design assumption (no standard kickback-cone geometry)" }
+      ],
+      "kickbackVectors": [ { "type": "vector", "offsetX": 0, "offsetY": 0, "angle": 180, "angleSpread": 20 } ],
+      "operatorFootprints": [ { "type": "rect", "offsetX": 0, "offsetY": -20 } ],
+      "amenityLinks": [
+        { "amenityType": "dustCollection", "maxDistanceUnits": 30, "mode": "advisory", "provenance": "NFPA 664 (dust system); 30 ft duct run = design assumption" }
+      ],
+      "provenance": {
+        "w": "design assumption (representative footprint, stage-%)",
+        "h": "design assumption (representative footprint, stage-%)",
+        "risk": "design assumption (0-5 relative risk)",
+        "dba_active": "SPACE frozen project (pinned, wood room 105); NIOSH power-tool noise (approx.)",
+        "schedule_prob": "design assumption (duty cycle)",
+        "power": "design assumption (representative nameplate; NEC 210 circuit)",
+        "ventilation": "design assumption (representative CFM; ACGIH Industrial Ventilation)",
+        "occupancy": "design assumption"
+      }
+    },
+    "bandSaw": {
+      "label": "Band Saw", "short": "BSaw", "w": 5, "h": 5, "risk": 4,
+      "dba_active": 90, "schedule_prob": 0.3,
+      "principalAxis": { "angle": 0, "length": 40 },
+      "hazards": { "dustProducing": true },
+      "ventilation": { "localExhaustRequired": true, "cfm": 300, "requiresExteriorWallOrDuct": false },
+      "power": { "volts": 120, "amps": 12, "phase": 1 },
+      "occupancy": { "operatorCount": 1, "personSpaceAreaUnits": 15, "footprintsMayOverlap": false },
+      "clearanceZones": [
+        { "id": "operator", "type": "operatorEnvelope", "severity": "advisory",
+          "geometry": { "kind": "template", "template": "rect", "params": { "offsetUnits": 0, "alongUnits": 3, "acrossUnits": 3 } },
+          "orientation": { "relativeTo": "principalAxis", "angleDeg": 180 },
+          "provenance": "design assumption (operator reach)" }
+      ],
+      "amenityLinks": [
+        { "amenityType": "dustCollection", "maxDistanceUnits": 30, "mode": "advisory", "provenance": "NFPA 664; 30 ft = design assumption" }
+      ],
+      "provenance": {
+        "w": "design assumption (representative footprint)", "h": "design assumption (representative footprint)",
+        "risk": "design assumption", "dba_active": "NIOSH power-tool noise (approx.)",
+        "schedule_prob": "design assumption", "power": "design assumption (nameplate; NEC 210)",
+        "ventilation": "design assumption (ACGIH)", "occupancy": "design assumption"
+      }
+    },
+    "miterSaw": {
+      "label": "Miter Saw", "short": "Miter", "w": 5, "h": 4, "risk": 4,
+      "dba_active": 100, "schedule_prob": 0.25,
+      "principalAxis": { "angle": 0, "length": 40 },
+      "hazards": { "dustProducing": true },
+      "ventilation": { "localExhaustRequired": true, "cfm": 250, "requiresExteriorWallOrDuct": false },
+      "power": { "volts": 120, "amps": 15, "phase": 1 },
+      "occupancy": { "operatorCount": 1, "personSpaceAreaUnits": 15, "footprintsMayOverlap": false },
+      "clearanceZones": [
+        { "id": "leftStock", "type": "infeedCorridor", "severity": "advisory",
+          "geometry": { "kind": "template", "template": "rect", "params": { "offsetUnits": 0, "alongUnits": 6, "acrossUnits": 2 } },
+          "orientation": { "relativeTo": "principalAxis", "angleDeg": 90 },
+          "provenance": "OSHA 1910.213; stock support length = design assumption" },
+        { "id": "rightStock", "type": "outfeedCorridor", "severity": "advisory",
+          "geometry": { "kind": "template", "template": "rect", "params": { "offsetUnits": 0, "alongUnits": 6, "acrossUnits": 2 } },
+          "orientation": { "relativeTo": "principalAxis", "angleDeg": 270 },
+          "provenance": "OSHA 1910.213; design assumption" }
+      ],
+      "amenityLinks": [
+        { "amenityType": "dustCollection", "maxDistanceUnits": 30, "mode": "advisory", "provenance": "NFPA 664; 30 ft = design assumption" }
+      ],
+      "provenance": {
+        "w": "design assumption (footprint)", "h": "design assumption (footprint)", "risk": "design assumption",
+        "dba_active": "NIOSH power-tool noise (approx.)", "schedule_prob": "design assumption",
+        "power": "design assumption (nameplate; NEC 210)", "ventilation": "design assumption (ACGIH)", "occupancy": "design assumption"
+      }
+    },
+    "jointer": {
+      "label": "Jointer", "short": "Joint", "w": 6, "h": 4, "risk": 5,
+      "dba_active": 100, "schedule_prob": 0.25,
+      "principalAxis": { "angle": 0, "length": 40 },
+      "hazards": { "dustProducing": true },
+      "ventilation": { "localExhaustRequired": true, "cfm": 400, "requiresExteriorWallOrDuct": false },
+      "power": { "volts": 240, "amps": 12, "phase": 1 },
+      "occupancy": { "operatorCount": 1, "personSpaceAreaUnits": 15, "footprintsMayOverlap": false },
+      "clearanceZones": [
+        { "id": "infeed", "type": "infeedCorridor", "severity": "hard",
+          "geometry": { "kind": "template", "template": "rect", "params": { "offsetUnits": 0, "alongUnits": 6, "acrossUnits": 2 } },
+          "orientation": { "relativeTo": "principalAxis", "angleDeg": 180 },
+          "provenance": "OSHA 1910.213; stock length = design assumption" },
+        { "id": "outfeed", "type": "outfeedCorridor", "severity": "hard",
+          "geometry": { "kind": "template", "template": "rect", "params": { "offsetUnits": 0, "alongUnits": 6, "acrossUnits": 2 } },
+          "orientation": { "relativeTo": "principalAxis", "angleDeg": 0 },
+          "provenance": "OSHA 1910.213; design assumption" },
+        { "id": "kickback", "type": "kickbackCone", "severity": "hard",
+          "geometry": { "kind": "template", "template": "cone", "params": { "apexOffsetUnits": 0, "spreadDeg": 15, "lengthUnits": 10 } },
+          "orientation": { "relativeTo": "principalAxis", "angleDeg": 180 },
+          "provenance": "design assumption (no standard cone geometry)" }
+      ],
+      "amenityLinks": [
+        { "amenityType": "dustCollection", "maxDistanceUnits": 25, "mode": "advisory", "provenance": "NFPA 664; 25 ft = design assumption" }
+      ],
+      "provenance": {
+        "w": "design assumption (footprint)", "h": "design assumption (footprint)", "risk": "design assumption",
+        "dba_active": "NIOSH power-tool noise (approx.)", "schedule_prob": "design assumption",
+        "power": "design assumption (nameplate; NEC 210)", "ventilation": "design assumption (ACGIH)", "occupancy": "design assumption"
+      }
+    },
+    "planer": {
+      "label": "Thickness Planer", "short": "Planer", "w": 6, "h": 5, "risk": 5,
+      "dba_active": 103, "schedule_prob": 0.25,
+      "principalAxis": { "angle": 0, "length": 40 },
+      "hazards": { "dustProducing": true },
+      "ventilation": { "localExhaustRequired": true, "cfm": 400, "requiresExteriorWallOrDuct": false },
+      "power": { "volts": 240, "amps": 15, "phase": 1 },
+      "occupancy": { "operatorCount": 1, "personSpaceAreaUnits": 15, "footprintsMayOverlap": false },
+      "clearanceZones": [
+        { "id": "infeed", "type": "infeedCorridor", "severity": "hard",
+          "geometry": { "kind": "template", "template": "rect", "params": { "offsetUnits": 0, "alongUnits": 8, "acrossUnits": 2 } },
+          "orientation": { "relativeTo": "principalAxis", "angleDeg": 180 },
+          "provenance": "OSHA 1910.213; stock length = design assumption" },
+        { "id": "outfeed", "type": "outfeedCorridor", "severity": "hard",
+          "geometry": { "kind": "template", "template": "rect", "params": { "offsetUnits": 0, "alongUnits": 8, "acrossUnits": 2 } },
+          "orientation": { "relativeTo": "principalAxis", "angleDeg": 0 },
+          "provenance": "OSHA 1910.213; design assumption" }
+      ],
+      "amenityLinks": [
+        { "amenityType": "dustCollection", "maxDistanceUnits": 25, "mode": "advisory", "provenance": "NFPA 664; 25 ft = design assumption" }
+      ],
+      "provenance": {
+        "w": "design assumption (footprint)", "h": "design assumption (footprint)", "risk": "design assumption",
+        "dba_active": "NIOSH power-tool noise (approx.)", "schedule_prob": "design assumption",
+        "power": "design assumption (nameplate; NEC 210)", "ventilation": "design assumption (ACGIH)", "occupancy": "design assumption"
+      }
+    },
+    "routerTable": {
+      "label": "Router Table", "short": "Router", "w": 5, "h": 4, "risk": 4,
+      "dba_active": 100, "schedule_prob": 0.3,
+      "principalAxis": { "angle": 0, "length": 40 },
+      "hazards": { "dustProducing": true },
+      "ventilation": { "localExhaustRequired": true, "cfm": 300, "requiresExteriorWallOrDuct": false },
+      "power": { "volts": 120, "amps": 12, "phase": 1 },
+      "occupancy": { "operatorCount": 1, "personSpaceAreaUnits": 15, "footprintsMayOverlap": false },
+      "clearanceZones": [
+        { "id": "kickback", "type": "kickbackCone", "severity": "hard",
+          "geometry": { "kind": "template", "template": "cone", "params": { "apexOffsetUnits": 0, "spreadDeg": 25, "lengthUnits": 8 } },
+          "orientation": { "relativeTo": "principalAxis", "angleDeg": 180 },
+          "provenance": "design assumption (no standard cone geometry)" }
+      ],
+      "amenityLinks": [
+        { "amenityType": "dustCollection", "maxDistanceUnits": 30, "mode": "advisory", "provenance": "NFPA 664; 30 ft = design assumption" }
+      ],
+      "provenance": {
+        "w": "design assumption (footprint)", "h": "design assumption (footprint)", "risk": "design assumption",
+        "dba_active": "NIOSH power-tool noise (approx.)", "schedule_prob": "design assumption",
+        "power": "design assumption (nameplate; NEC 210)", "ventilation": "design assumption (ACGIH)", "occupancy": "design assumption"
+      }
+    },
+    "drillPress": {
+      "label": "Drill Press", "short": "Drill", "w": 4, "h": 4, "risk": 3,
+      "dba_active": 85, "schedule_prob": 0.2,
+      "principalAxis": { "angle": 0, "length": 40 },
+      "hazards": { "dustProducing": true },
+      "power": { "volts": 120, "amps": 8, "phase": 1 },
+      "occupancy": { "operatorCount": 1, "personSpaceAreaUnits": 15, "footprintsMayOverlap": false },
+      "clearanceZones": [
+        { "id": "operator", "type": "operatorEnvelope", "severity": "advisory",
+          "geometry": { "kind": "template", "template": "rect", "params": { "offsetUnits": 0, "alongUnits": 3, "acrossUnits": 3 } },
+          "orientation": { "relativeTo": "principalAxis", "angleDeg": 180 },
+          "provenance": "design assumption (operator reach)" }
+      ],
+      "provenance": {
+        "w": "design assumption (footprint)", "h": "design assumption (footprint)", "risk": "design assumption",
+        "dba_active": "NIOSH power-tool noise (approx., OSHA 1910.95 action level context)", "schedule_prob": "design assumption",
+        "power": "design assumption (nameplate; NEC 210)", "occupancy": "design assumption"
+      }
+    },
+    "woodLathe": {
+      "label": "Wood Lathe", "short": "WLathe", "w": 6, "h": 4, "risk": 4,
+      "dba_active": 90, "schedule_prob": 0.3,
+      "principalAxis": { "angle": 0, "length": 40 },
+      "hazards": { "dustProducing": true },
+      "ventilation": { "localExhaustRequired": true, "cfm": 250, "requiresExteriorWallOrDuct": false },
+      "power": { "volts": 120, "amps": 10, "phase": 1 },
+      "occupancy": { "operatorCount": 1, "personSpaceAreaUnits": 15, "footprintsMayOverlap": false },
+      "clearanceZones": [
+        { "id": "operator", "type": "operatorEnvelope", "severity": "advisory",
+          "geometry": { "kind": "template", "template": "rect", "params": { "offsetUnits": 0, "alongUnits": 3, "acrossUnits": 6 } },
+          "orientation": { "relativeTo": "principalAxis", "angleDeg": 180 },
+          "provenance": "design assumption (tool-rest reach along the bed)" }
+      ],
+      "amenityLinks": [
+        { "amenityType": "dustCollection", "maxDistanceUnits": 30, "mode": "advisory", "provenance": "NFPA 664; 30 ft = design assumption" }
+      ],
+      "provenance": {
+        "w": "design assumption (footprint)", "h": "design assumption (footprint)", "risk": "design assumption",
+        "dba_active": "NIOSH power-tool noise (approx.)", "schedule_prob": "design assumption",
+        "power": "design assumption (nameplate; NEC 210)", "ventilation": "design assumption (ACGIH)", "occupancy": "design assumption"
+      }
+    },
+    "metalLathe": {
+      "label": "Metal Lathe", "short": "MLathe", "w": 7, "h": 4, "risk": 4,
+      "dba_active": 88, "schedule_prob": 0.3,
+      "principalAxis": { "angle": 0, "length": 40 },
+      "hazards": { "wetProcess": true },
+      "power": { "volts": 240, "amps": 15, "phase": 1 },
+      "utilities": { "compressedAir": true },
+      "occupancy": { "operatorCount": 1, "personSpaceAreaUnits": 15, "footprintsMayOverlap": false },
+      "clearanceZones": [
+        { "id": "operator", "type": "operatorEnvelope", "severity": "advisory",
+          "geometry": { "kind": "template", "template": "rect", "params": { "offsetUnits": 0, "alongUnits": 3, "acrossUnits": 7 } },
+          "orientation": { "relativeTo": "principalAxis", "angleDeg": 180 },
+          "provenance": "design assumption (carriage traverse reach)" }
+      ],
+      "amenityLinks": [
+        { "amenityType": "eyewash", "maxTravelSeconds": 10, "maxDistanceUnits": 55, "mode": "strict", "provenance": "ANSI/ISEA Z358.1-2014 §4.5.2 (coolant/chip eye hazard)" }
+      ],
+      "provenance": {
+        "w": "design assumption (footprint)", "h": "design assumption (footprint)", "risk": "design assumption",
+        "dba_active": "NIOSH power-tool noise (approx.)", "schedule_prob": "design assumption",
+        "power": "design assumption (nameplate; NEC 210)", "occupancy": "design assumption"
+      }
+    },
+    "cncRouter": {
+      "label": "CNC Router", "short": "CNCr", "w": 7, "h": 7, "risk": 4,
+      "dba_active": 103, "schedule_prob": 0.5,
+      "principalAxis": { "angle": 0, "length": 40 },
+      "hazards": { "dustProducing": true, "vibrationSource": true },
+      "ventilation": { "localExhaustRequired": true, "cfm": 600, "requiresExteriorWallOrDuct": false },
+      "power": { "volts": 240, "amps": 20, "phase": 3 },
+      "occupancy": { "operatorCount": 1, "personSpaceAreaUnits": 15, "footprintsMayOverlap": false },
+      "clearanceZones": [
+        { "id": "service", "type": "maintenanceAccess", "severity": "advisory",
+          "geometry": { "kind": "template", "template": "rect", "params": { "offsetUnits": 0, "alongUnits": 3, "acrossUnits": 7 } },
+          "orientation": { "relativeTo": "principalAxis", "angleDeg": 0 },
+          "provenance": "NEC 110.26 (electrical working space); footprint = design assumption" }
+      ],
+      "amenityLinks": [
+        { "amenityType": "dustCollection", "maxDistanceUnits": 20, "mode": "strict", "provenance": "NFPA 664; 20 ft = design assumption" }
+      ],
+      "provenance": {
+        "w": "design assumption (footprint)", "h": "design assumption (footprint)", "risk": "design assumption",
+        "dba_active": "SPACE frozen project (pinned, cnc 103); NIOSH (approx.)", "schedule_prob": "design assumption",
+        "power": "design assumption (nameplate; NEC 210)", "ventilation": "design assumption (ACGIH)", "occupancy": "design assumption"
+      }
+    },
+    "cncMill": {
+      "label": "CNC Mill", "short": "CNCm", "w": 7, "h": 6, "risk": 4,
+      "dba_active": 95, "schedule_prob": 0.5,
+      "principalAxis": { "angle": 0, "length": 40 },
+      "hazards": { "wetProcess": true, "vibrationSource": true },
+      "power": { "volts": 240, "amps": 30, "phase": 3 },
+      "utilities": { "compressedAir": true },
+      "occupancy": { "operatorCount": 1, "personSpaceAreaUnits": 15, "footprintsMayOverlap": false },
+      "clearanceZones": [
+        { "id": "service", "type": "maintenanceAccess", "severity": "advisory",
+          "geometry": { "kind": "template", "template": "rect", "params": { "offsetUnits": 0, "alongUnits": 3, "acrossUnits": 6 } },
+          "orientation": { "relativeTo": "principalAxis", "angleDeg": 0 },
+          "provenance": "NEC 110.26 (electrical working space); footprint = design assumption" }
+      ],
+      "amenityLinks": [
+        { "amenityType": "eyewash", "maxTravelSeconds": 10, "maxDistanceUnits": 55, "mode": "strict", "provenance": "ANSI/ISEA Z358.1-2014 §4.5.2 (coolant hazard)" }
+      ],
+      "provenance": {
+        "w": "design assumption (footprint)", "h": "design assumption (footprint)", "risk": "design assumption",
+        "dba_active": "NIOSH power-tool noise (approx.)", "schedule_prob": "design assumption",
+        "power": "design assumption (nameplate; NEC 210)", "occupancy": "design assumption"
+      }
+    },
+    "laserCutter": {
+      "label": "Laser Cutter", "short": "Laser", "w": 6, "h": 5, "risk": 4,
+      "dba_active": 65, "schedule_prob": 0.5,
+      "principalAxis": { "angle": 0, "length": 40 },
+      "hazards": { "hotWork": true },
+      "ventilation": { "localExhaustRequired": true, "cfm": 400, "requiresExteriorWallOrDuct": true },
+      "power": { "volts": 120, "amps": 15, "phase": 1 },
+      "utilities": { "compressedAir": true },
+      "occupancy": { "operatorCount": 1, "personSpaceAreaUnits": 15, "footprintsMayOverlap": false },
+      "clearanceZones": [
+        { "id": "lid", "type": "doorSwing", "severity": "hard",
+          "geometry": { "kind": "template", "template": "rect", "params": { "offsetUnits": 0, "alongUnits": 3, "acrossUnits": 5 } },
+          "orientation": { "relativeTo": "principalAxis", "angleDeg": 180 },
+          "provenance": "design assumption (lid clearance)" }
+      ],
+      "amenityLinks": [
+        { "amenityType": "fireExtinguisher", "maxDistanceUnits": 30, "mode": "strict", "provenance": "NFPA 10 (2022) §6.3 (Class B, high-hazard 30 ft; laser fire risk)" },
+        { "amenityType": "fumeHood", "maxDistanceUnits": 5, "mode": "strict", "provenance": "OSHA 1910.94 / ACGIH; at-process exhaust, 5 ft = design assumption" }
+      ],
+      "provenance": {
+        "w": "design assumption (footprint)", "h": "design assumption (footprint)", "risk": "design assumption",
+        "dba_active": "SPACE frozen project (pinned, laser 65); NIOSH (approx.)", "schedule_prob": "design assumption",
+        "power": "design assumption (nameplate; NEC 210)", "ventilation": "design assumption (ACGIH); exterior duct = manufacturer requirement", "occupancy": "design assumption"
+      }
+    },
+    "printer3d": {
+      "label": "3D Printer (FDM)", "short": "3DP", "w": 4, "h": 4, "risk": 1,
+      "dba_active": 50, "schedule_prob": 0.8,
+      "principalAxis": { "angle": 0, "length": 40 },
+      "hazards": {},
+      "ventilation": { "localExhaustRequired": false, "cfm": null, "requiresExteriorWallOrDuct": false },
+      "power": { "volts": 120, "amps": 3, "phase": 1 },
+      "occupancy": { "operatorCount": 1, "personSpaceAreaUnits": 10, "footprintsMayOverlap": true },
+      "clearanceZones": [
+        { "id": "operator", "type": "operatorEnvelope", "severity": "advisory",
+          "geometry": { "kind": "template", "template": "rect", "params": { "offsetUnits": 0, "alongUnits": 2, "acrossUnits": 2 } },
+          "orientation": { "relativeTo": "principalAxis", "angleDeg": 180 },
+          "provenance": "design assumption (loading reach)" }
+      ],
+      "provenance": {
+        "w": "design assumption (footprint)", "h": "design assumption (footprint)", "risk": "design assumption",
+        "dba_active": "SPACE frozen project (pinned, print3d 50); NIOSH (approx.)", "schedule_prob": "design assumption (long unattended runs)",
+        "power": "design assumption (nameplate; NEC 210)", "occupancy": "design assumption"
+      }
+    },
+    "weldingStation": {
+      "label": "Welding Station", "short": "Weld", "w": 6, "h": 5, "risk": 5,
+      "dba_active": 90, "schedule_prob": 0.3,
+      "principalAxis": { "angle": 0, "length": 40 },
+      "hazards": { "sparkSource": true, "hotWork": true, "flammable": true },
+      "ventilation": { "localExhaustRequired": true, "cfm": 800, "requiresExteriorWallOrDuct": true },
+      "power": { "volts": 240, "amps": 50, "phase": 1 },
+      "utilities": { "compressedAir": true },
+      "occupancy": { "operatorCount": 1, "personSpaceAreaUnits": 20, "footprintsMayOverlap": false },
+      "clearanceZones": [
+        { "id": "sparkArc", "type": "sparkArc", "severity": "hard",
+          "geometry": { "kind": "template", "template": "cone", "params": { "apexOffsetUnits": 0, "spreadDeg": 90, "lengthUnits": 35 } },
+          "orientation": { "relativeTo": "principalAxis", "angleDeg": 0 },
+          "provenance": "NFPA 51B §5.6 (combustibles within 35 ft of hot work relocated/protected)" }
+      ],
+      "amenityLinks": [
+        { "amenityType": "fireExtinguisher", "maxDistanceUnits": 30, "mode": "strict", "provenance": "NFPA 10 (2022) §6.3 (Class B/high hazard, 30 ft)" },
+        { "amenityType": "flammablesCabinet", "maxDistanceUnits": 35, "mode": "advisory", "provenance": "NFPA 30 / OSHA 1910.106 (separate from hot work; 35 ft per NFPA 51B)" }
+      ],
+      "provenance": {
+        "w": "design assumption (footprint)", "h": "design assumption (footprint)", "risk": "design assumption",
+        "dba_active": "SPACE frozen project (pinned, welding 90); NIOSH (approx.)", "schedule_prob": "design assumption",
+        "power": "design assumption (nameplate; NEC 210)", "ventilation": "design assumption (ACGIH); exterior duct = design assumption", "occupancy": "design assumption"
+      }
+    },
+    "plasmaCutter": {
+      "label": "Plasma Cutter", "short": "Plasma", "w": 6, "h": 5, "risk": 5,
+      "dba_active": 100, "schedule_prob": 0.3,
+      "principalAxis": { "angle": 0, "length": 40 },
+      "hazards": { "sparkSource": true, "hotWork": true },
+      "ventilation": { "localExhaustRequired": true, "cfm": 800, "requiresExteriorWallOrDuct": true },
+      "power": { "volts": 240, "amps": 40, "phase": 3 },
+      "utilities": { "compressedAir": true },
+      "occupancy": { "operatorCount": 1, "personSpaceAreaUnits": 20, "footprintsMayOverlap": false },
+      "clearanceZones": [
+        { "id": "sparkArc", "type": "sparkArc", "severity": "hard",
+          "geometry": { "kind": "template", "template": "cone", "params": { "apexOffsetUnits": 0, "spreadDeg": 90, "lengthUnits": 35 } },
+          "orientation": { "relativeTo": "principalAxis", "angleDeg": 0 },
+          "provenance": "NFPA 51B §5.6 (35 ft combustible separation)" }
+      ],
+      "amenityLinks": [
+        { "amenityType": "fireExtinguisher", "maxDistanceUnits": 30, "mode": "strict", "provenance": "NFPA 10 (2022) §6.3 (Class B, 30 ft)" }
+      ],
+      "provenance": {
+        "w": "design assumption (footprint)", "h": "design assumption (footprint)", "risk": "design assumption",
+        "dba_active": "NIOSH power-tool noise (approx.)", "schedule_prob": "design assumption",
+        "power": "design assumption (nameplate; NEC 210)", "ventilation": "design assumption (ACGIH); exterior duct = design assumption", "occupancy": "design assumption"
+      }
+    },
+    "benchGrinder": {
+      "label": "Bench Grinder", "short": "Grind", "w": 3, "h": 3, "risk": 4,
+      "dba_active": 95, "schedule_prob": 0.2,
+      "principalAxis": { "angle": 0, "length": 40 },
+      "hazards": { "sparkSource": true, "dustProducing": true },
+      "power": { "volts": 120, "amps": 8, "phase": 1 },
+      "occupancy": { "operatorCount": 1, "personSpaceAreaUnits": 15, "footprintsMayOverlap": false },
+      "clearanceZones": [
+        { "id": "sparkArc", "type": "sparkArc", "severity": "advisory",
+          "geometry": { "kind": "template", "template": "cone", "params": { "apexOffsetUnits": 0, "spreadDeg": 30, "lengthUnits": 8 } },
+          "orientation": { "relativeTo": "principalAxis", "angleDeg": 0 },
+          "provenance": "OSHA 1910.215 (abrasive wheel machinery); spark-stream geometry = design assumption" }
+      ],
+      "amenityLinks": [
+        { "amenityType": "eyewash", "maxTravelSeconds": 10, "maxDistanceUnits": 55, "mode": "strict", "provenance": "ANSI/ISEA Z358.1-2014 §4.5.2 (grinding particulate eye hazard)" }
+      ],
+      "provenance": {
+        "w": "design assumption (footprint)", "h": "design assumption (footprint)", "risk": "design assumption",
+        "dba_active": "NIOSH power-tool noise (approx.)", "schedule_prob": "design assumption",
+        "power": "design assumption (nameplate; NEC 210)", "occupancy": "design assumption"
+      }
+    },
+    "sander": {
+      "label": "Belt/Disc Sander", "short": "Sander", "w": 4, "h": 4, "risk": 3,
+      "dba_active": 90, "schedule_prob": 0.3,
+      "principalAxis": { "angle": 0, "length": 40 },
+      "hazards": { "dustProducing": true },
+      "ventilation": { "localExhaustRequired": true, "cfm": 350, "requiresExteriorWallOrDuct": false },
+      "power": { "volts": 120, "amps": 10, "phase": 1 },
+      "occupancy": { "operatorCount": 1, "personSpaceAreaUnits": 15, "footprintsMayOverlap": false },
+      "clearanceZones": [
+        { "id": "operator", "type": "operatorEnvelope", "severity": "advisory",
+          "geometry": { "kind": "template", "template": "rect", "params": { "offsetUnits": 0, "alongUnits": 3, "acrossUnits": 3 } },
+          "orientation": { "relativeTo": "principalAxis", "angleDeg": 180 },
+          "provenance": "design assumption (operator reach)" }
+      ],
+      "amenityLinks": [
+        { "amenityType": "dustCollection", "maxDistanceUnits": 25, "mode": "strict", "provenance": "NFPA 664; 25 ft = design assumption" }
+      ],
+      "provenance": {
+        "w": "design assumption (footprint)", "h": "design assumption (footprint)", "risk": "design assumption",
+        "dba_active": "NIOSH power-tool noise (approx.)", "schedule_prob": "design assumption",
+        "power": "design assumption (nameplate; NEC 210)", "ventilation": "design assumption (ACGIH)", "occupancy": "design assumption"
+      }
+    },
+    "sewingStation": {
+      "label": "Sewing Station", "short": "Sew", "w": 4, "h": 4, "risk": 1,
+      "dba_active": 76, "schedule_prob": 0.5,
+      "principalAxis": { "angle": 0, "length": 40 },
+      "hazards": {},
+      "power": { "volts": 120, "amps": 2, "phase": 1 },
+      "occupancy": { "operatorCount": 1, "personSpaceAreaUnits": 15, "footprintsMayOverlap": false },
+      "clearanceZones": [
+        { "id": "operator", "type": "operatorEnvelope", "severity": "advisory",
+          "geometry": { "kind": "template", "template": "rect", "params": { "offsetUnits": 0, "alongUnits": 3, "acrossUnits": 3 } },
+          "orientation": { "relativeTo": "principalAxis", "angleDeg": 180 },
+          "provenance": "design assumption (seated operator reach)" }
+      ],
+      "provenance": {
+        "w": "design assumption (footprint)", "h": "design assumption (footprint)", "risk": "design assumption",
+        "dba_active": "NIOSH power-tool noise (approx., below OSHA 1910.95 action level)", "schedule_prob": "design assumption",
+        "power": "design assumption (nameplate; NEC 210)", "occupancy": "design assumption"
+      }
+    },
+    "electronicsBench": {
+      "label": "Electronics / Soldering Bench", "short": "Elec", "w": 6, "h": 4, "risk": 2,
+      "dba_active": 45, "schedule_prob": 0.4,
+      "principalAxis": { "angle": 0, "length": 40 },
+      "hazards": { "hotWork": true, "dustSensitive": true },
+      "ventilation": { "localExhaustRequired": true, "cfm": 100, "requiresExteriorWallOrDuct": false },
+      "power": { "volts": 120, "amps": 10, "phase": 1 },
+      "occupancy": { "operatorCount": 2, "personSpaceAreaUnits": 15, "footprintsMayOverlap": false },
+      "clearanceZones": [
+        { "id": "operator", "type": "operatorEnvelope", "severity": "advisory",
+          "geometry": { "kind": "template", "template": "rect", "params": { "offsetUnits": 0, "alongUnits": 3, "acrossUnits": 6 } },
+          "orientation": { "relativeTo": "principalAxis", "angleDeg": 180 },
+          "provenance": "design assumption (seated bench reach)" }
+      ],
+      "amenityLinks": [
+        { "amenityType": "fumeHood", "maxDistanceUnits": 3, "mode": "strict", "provenance": "OSHA 1910.94 / ACGIH (solder-fume extraction at process); 3 ft = design assumption" },
+        { "amenityType": "firstAid", "maxDistanceUnits": null, "mode": "advisory", "provenance": "OSHA 1910.151(b) (near vicinity; no numeric distance = design assumption)" }
+      ],
+      "provenance": {
+        "w": "design assumption (footprint)", "h": "design assumption (footprint)", "risk": "design assumption",
+        "dba_active": "SPACE frozen project (pinned, electronics 45); NIOSH (approx.)", "schedule_prob": "design assumption",
+        "power": "design assumption (nameplate; NEC 210)", "ventilation": "design assumption (ACGIH)", "occupancy": "design assumption"
+      }
+    },
+    "waterjet": {
+      "label": "Waterjet Cutter", "short": "WJet", "w": 6, "h": 5, "risk": 4,
+      "dba_active": 92, "schedule_prob": 0.4,
+      "principalAxis": { "angle": 0, "length": 40 },
+      "hazards": { "wetProcess": true },
+      "ventilation": { "localExhaustRequired": false, "cfm": null, "requiresExteriorWallOrDuct": false },
+      "power": { "volts": 480, "amps": 60, "phase": 3 },
+      "utilities": { "compressedAir": false, "waterSupply": true, "floorDrain": true },
+      "occupancy": { "operatorCount": 1, "personSpaceAreaUnits": 20, "footprintsMayOverlap": false },
+      "clearanceZones": [
+        { "id": "service", "type": "maintenanceAccess", "severity": "advisory",
+          "geometry": { "kind": "template", "template": "rect", "params": { "offsetUnits": 0, "alongUnits": 3, "acrossUnits": 5 } },
+          "orientation": { "relativeTo": "principalAxis", "angleDeg": 0 },
+          "provenance": "NEC 110.26 (electrical working space); footprint = design assumption" }
+      ],
+      "amenityLinks": [
+        { "amenityType": "eyewash", "maxTravelSeconds": 10, "maxDistanceUnits": 55, "mode": "strict", "provenance": "ANSI/ISEA Z358.1-2014 §4.5.2 (high-pressure abrasive/garnet eye hazard)" }
+      ],
+      "provenance": {
+        "w": "design assumption (footprint)", "h": "design assumption (footprint)", "risk": "design assumption",
+        "dba_active": "SPACE frozen project (pinned, waterjet 92); NIOSH (approx.)", "schedule_prob": "design assumption",
+        "power": "design assumption (nameplate; NEC 210)", "occupancy": "design assumption"
+      }
+    },
+    "assemblyTable": {
+      "label": "Assembly Table", "short": "Asm", "w": 8, "h": 5, "risk": 0,
+      "principalAxis": { "angle": 0, "length": 40 },
+      "hazards": {},
+      "occupancy": { "operatorCount": 4, "personSpaceAreaUnits": 15, "footprintsMayOverlap": true },
+      "clearanceZones": [
+        { "id": "perimeter", "type": "operatorEnvelope", "severity": "advisory",
+          "geometry": { "kind": "template", "template": "rect", "params": { "offsetUnits": 0, "alongUnits": 3, "acrossUnits": 8 } },
+          "orientation": { "relativeTo": "principalAxis", "angleDeg": 180 },
+          "provenance": "design assumption (standing work reach around table)" }
+      ],
+      "provenance": {
+        "w": "design assumption (footprint)", "h": "design assumption (footprint)", "risk": "design assumption (non-hazardous)",
+        "occupancy": "design assumption (multi-user table; overlap allowed)"
+      }
+    }
+  }
+}

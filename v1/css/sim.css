@@ -95,3 +95,78 @@
   padding: 4px 0;
   line-height: 1.5;
 }
+
+/* Optimizer UI */
+
+.opt-ctrl-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 6px;
+  border-left: 1px solid var(--line);
+}
+
+.opt-progress-wrap {
+  height: 3px;
+  background: var(--bg-2);
+  border-radius: 2px;
+  overflow: hidden;
+  margin: 0 4px;
+  min-width: 40px;
+}
+
+.opt-progress-bar {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 2px;
+  transition: width 0.1s linear;
+  width: 0%;
+}
+
+.opt-table .opt-hdr-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 0 0 4px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 10px;
+  color: var(--text);
+  opacity: 0.55;
+  font-weight: 600;
+}
+
+.opt-table .opt-hdr-row span { flex: 1; }
+.opt-table .opt-hdr-row span:first-child { flex: 2; }
+
+.opt-table .sim-row span:nth-child(1) { flex: 2; }
+.opt-table .sim-row span { flex: 1; white-space: nowrap; }
+.opt-table .sim-row b   { flex: 1; white-space: nowrap; }
+
+/* Pareto frontier scatter */
+.opt-frontier-scatter {
+  display: block;
+  margin: 6px 0 2px;
+  background: var(--bg-2);
+  border-radius: 3px;
+}
+
+/* Plain-English trade-off sentence */
+.opt-tradeoff {
+  font-size: 11px;
+  color: var(--text);
+  opacity: 0.85;
+  padding: 5px 0 3px;
+  line-height: 1.45;
+  font-style: italic;
+}
+
+/* Clickable frontier rows */
+.opt-frontier-row {
+  cursor: pointer;
+}
+.opt-frontier-row:hover {
+  background: var(--bg-2);
+}
+.opt-frontier-selected {
+  background: rgba(90, 160, 255, 0.10);
+}

@@ -1,0 +1,511 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://space-mosa/schema/space-project.v2.json",
+  "title": "SPACE Project (v2)",
+  "description": "Config-driven description of a room-layout optimization project. Everything the layout needs is pure data: the room shape and scale, a machine-type library, placed machine instances, adjacency rules, objective weights, and rule modes. A rectangle with editable width/height is the common case; preset (L/T) and arbitrary polygons serialize through the same `room` object. Coordinate convention: all in-room geometry is normalized stage percent (0..100 of the stage box); real-unit values (feet/meters) are derived via `room.scale`. Forward-looking fields (per-machine footprint/clearance polygons, hazard flags, power, adjacency, ruleModes, objectiveWeights) are part of the schema but are NOT YET consumed by the v1 engine — see V2_COUPLING.md.",
+  "type": "object",
+  "required": ["schemaVersion", "room", "machineTypes", "machines"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "pattern": "^2\\.[0-9]+\\.[0-9]+$",
+      "description": "Semantic version of THIS schema. V0 emits 2.0.0; E1 adds optional element attributes at 2.1.0; N1 adds the adjacency-override block at 2.2.0; L1 adds the optional amenity-link-override block at 2.3.0 (an earlier project omitting these validates and behaves identically)."
+    },
+    "meta": {
+      "type": "object",
+      "description": "Human/provenance metadata; never affects computation.",
+      "additionalProperties": true,
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "provenance": { "type": "object", "additionalProperties": true }
+      }
+    },
+
+    "room": {
+      "type": "object",
+      "description": "The room the layout lives in: its shape, scale, and floor outline.",
+      "required": ["shape", "scale"],
+      "additionalProperties": true,
+      "properties": {
+        "shape": {
+          "enum": ["rectangle", "preset", "polygon"],
+          "description": "rectangle: full-stage box. preset: a named parametric shape (L, T). polygon: explicit outline in `polygonPct`."
+        },
+        "preset": {
+          "enum": ["L", "T"],
+          "description": "Required when shape=preset. Parameters in `presetParams`."
+        },
+        "presetParams": {
+          "type": "object",
+          "description": "Notch/stem fractions (stage %) for preset shapes.",
+          "additionalProperties": true
+        },
+        "polygonPct": {
+          "type": "array",
+          "minItems": 3,
+          "description": "Required when shape=polygon. Room outline as normalized stage-% points (0..100), CCW or CW. Passed verbatim to the engine's structural floor element.",
+          "items": {
+            "type": "object",
+            "required": ["x", "y"],
+            "properties": {
+              "x": { "type": "number", "minimum": 0, "maximum": 100 },
+              "y": { "type": "number", "minimum": 0, "maximum": 100 }
+            }
+          }
+        },
+        "scale": {
+          "type": "object",
+          "description": "Maps stage percent <-> real units.",
+          "required": ["pxPerUnit", "unit"],
+          "additionalProperties": true,
+          "properties": {
+            "pxPerUnit": { "type": "number", "exclusiveMinimum": 0, "description": "Pixels per real unit (e.g. 9 px/ft)." },
+            "unit": { "enum": ["ft", "m"], "description": "Real-world length unit." },
+            "widthUnits": { "type": "number", "exclusiveMinimum": 0, "description": "Stage width in real units (bounding box)." },
+            "heightUnits": { "type": "number", "exclusiveMinimum": 0, "description": "Stage height in real units (bounding box)." }
+          }
+        },
+        "stage": {
+          "type": "object",
+          "description": "Stage pixel dimensions. If omitted, derived as pxPerUnit * {width,height}Units. Given explicitly for the frozen pin to avoid float rounding.",
+          "properties": {
+            "widthPx": { "type": "number", "exclusiveMinimum": 0 },
+            "heightPx": { "type": "number", "exclusiveMinimum": 0 }
+          }
+        },
+        "floorId": { "type": "string", "description": "Id assigned to the structural floor element. Must be distinct from all machine ids." },
+        "floorLabel": { "type": "string" },
+        "structuralBlockers": {
+          "type": "array",
+          "description": "Structural elements beyond the floor (e.g. a wall filling an excluded notch, or interior walls). The objective grids treat these as walls: ADA/egress block their cells and noise rasterizes them into the STC grid. Each carries its own zone rectangle.",
+          "items": {
+            "type": "object",
+            "required": ["id", "x", "y", "w", "h"],
+            "additionalProperties": true,
+            "properties": {
+              "id": { "type": "string", "description": "Unique id (distinct from machines and the floor)." },
+              "label": { "type": "string" },
+              "elementClass": { "const": "structural" },
+              "subtype": { "enum": ["wall", "door", "floor"], "description": "wall => blocks + STC barrier." },
+              "cat": { "type": "string", "description": "e.g. 'wall'." },
+              "blocksMovement": { "type": "boolean", "description": "true forces ADA/egress blocking." },
+              "x": { "type": "number", "description": "Top-left x, stage %." },
+              "y": { "type": "number", "description": "Top-left y, stage %." },
+              "w": { "type": "number", "description": "Width, stage %." },
+              "h": { "type": "number", "description": "Height, stage %." },
+              "rotation": { "type": "number" }
+            }
+          }
+        },
+        "verticesUnits": { "type": "array", "description": "Documentation only: room outline in real units. Not consumed." },
+        "notes": { "type": "object", "additionalProperties": true }
+      }
+    },
+
+    "machineTypes": {
+      "type": "object",
+      "description": "Library of machine/element TYPES keyed by type id. Shared attributes; instances reference a type and add position + optional overrides.",
+      "additionalProperties": { "$ref": "#/$defs/machineType" }
+    },
+
+    "machines": {
+      "type": "array",
+      "description": "Placed machine INSTANCES, in evaluation order (order flows into the engine's zone list).",
+      "items": { "$ref": "#/$defs/machineInstance" }
+    },
+
+    "optimization": {
+      "type": "object",
+      "description": "How to optimize this layout.",
+      "additionalProperties": true,
+      "properties": {
+        "movableIds": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Machine ids the optimizer may relocate/rotate. Others are fixed obstacles."
+        },
+        "objectiveWeights": {
+          "type": "object",
+          "description": "Relative objective weights. NOTE: the current MOSA optimizer uses randomized-weight SA and does NOT consume these; retained for a future weighted-scalar report and weight-driven objective. See V2_COUPLING.md.",
+          "properties": {
+            "ada": { "type": "number", "minimum": 0 },
+            "egress": { "type": "number", "minimum": 0 },
+            "noise": { "type": "number", "minimum": 0 }
+          },
+          "additionalProperties": { "type": "number", "minimum": 0 }
+        },
+        "seed": {
+          "oneOf": [{ "type": "string", "pattern": "^0[xX][0-9a-fA-F]+$" }, { "type": "integer" }],
+          "description": "PRNG seed. Hex string (\"0x4D524443\") or integer."
+        },
+        "iters": { "type": "integer", "exclusiveMinimum": 0, "description": "SA iteration count." }
+      }
+    },
+
+    "structuralGeometry": {
+      "type": "object",
+      "description": "v2 Phase G1 (GEOMETRY ONLY, not yet read by the v1 engine — the seam ignores it, so the frozen pin is unaffected). Walls, doors, floors and zones LINKED BY REFERENCE, forming closed calculable rooms. A wall is a segment; a door is a permeable wall segment (walkThrough) that still bounds a zone but is an opening; a floor is the region bounded by a zone's closed loop; a zone is an enclosed area. Zones/floors are usually the OUTPUT of v2/zone-detection.mjs but may also be authored/corrected here. Coordinates are stage-% (0..100); real-unit areas derive via room.scale.",
+      "additionalProperties": false,
+      "properties": {
+        "walls": {
+          "type": "array",
+          "description": "Wall segments. Segments sharing an endpoint (within snap tolerance) form the wall graph whose closed loops are zones.",
+          "items": { "$ref": "#/$defs/wallSegment" }
+        },
+        "doors": {
+          "type": "array",
+          "description": "Doors: permeable wall segments. Each references the wall it lies on (or carries its own endpoints) and connects zone(s) or a zone to outside.",
+          "items": { "$ref": "#/$defs/doorSegment" }
+        },
+        "floors": {
+          "type": "array",
+          "description": "Floors: a region bounded by a closed loop of wall/door segments (1:1 with a zone in G1).",
+          "items": { "$ref": "#/$defs/floorRegion" }
+        },
+        "zones": {
+          "type": "array",
+          "description": "Enclosed zones. Each knows its bounding walls (boundary) and its doors, plus a per-zone attribute bag reserved for later sim use.",
+          "items": { "$ref": "#/$defs/zoneRegion" }
+        },
+        "snapTol": { "type": "number", "description": "Endpoint snap tolerance in stage-% (default 0.05)." }
+      }
+    },
+
+    "adjacency": {
+      "type": "array",
+      "description": "Pairwise adjacency overrides (v2 Phase N1). CONSUMED by the `adjacency` MOSA objective, which resolves each machine pair as: this array (user override) > built-in explicit defaults > rule-derived hazard defaults > NEUTRAL. Optional; an absent/empty array leaves the built-in defaults in force. See v2/ADJACENCY.md and v2/adjacency-defaults.json.",
+      "items": { "$ref": "#/$defs/adjacencyRule" }
+    },
+
+    "amenityLinks": {
+      "type": "array",
+      "description": "Amenity-link OVERRIDES (v2 Phase L1, schema 2.3.0). CONSUMED by the `amenityLinks` MOSA objective, which resolves each machine->amenity requirement as: this array (user override, matched by `machine` id/type + amenityType) > the machine type's own amenityLinks > rule-derived (hazard/ventilation flags, v2/amenity-link-defaults.json) > none. Optional and inert by default; an absent array leaves the built-in + rule-derived links in force. See v2/AMENITY_LINKS.md.",
+      "items": { "$ref": "#/$defs/amenityLink" }
+    },
+
+    "ruleModes": {
+      "type": "object",
+      "description": "Global rule strictness. Forward-looking: not yet consumed by the engine.",
+      "additionalProperties": true,
+      "properties": {
+        "adjacency": { "enum": ["strict", "advisory"] },
+        "clearance": { "enum": ["strict", "advisory"] }
+      }
+    }
+  },
+
+  "$defs": {
+    "machineType": {
+      "type": "object",
+      "description": "A reusable machine/element type. Engine-consumed fields (V0): label, short, risk, fixed, cat, beginner, w, h, dba_active, and (when a structural element) elementClass/subtype/blocksMovement/schedule_prob. Forward-looking fields are documented but not yet read.",
+      "additionalProperties": true,
+      "properties": {
+        "label": { "type": "string", "description": "Display name. Also used by ADA door-width checks (label containing 'exit')." },
+        "short": { "type": "string" },
+        "risk": { "type": "number", "description": "Risk score 0..5 (used by scoring; not by the sim objectives)." },
+        "fixed": { "type": "boolean", "description": "If true, the instance is locked (not movable)." },
+        "cat": {
+          "type": "string",
+          "description": "Category tag the engine keys off: 'exit' (egress seed), 'corridor'/'open' (excluded from the movable pool), 'structural-wall'/'wall' (solid), 'structural-door'/'door', 'structural-floor'. Empty/other => solid equipment."
+        },
+        "beginner": { "type": "boolean" },
+        "w": { "type": "number", "exclusiveMinimum": 0, "description": "Default footprint width, stage %." },
+        "h": { "type": "number", "exclusiveMinimum": 0, "description": "Default footprint height, stage %." },
+        "dba_active": { "type": "number", "description": "Operating sound level at 1 m (dBA). Zones below NOISE_AMBIENT_DBA (40) are non-emitters. Absent => non-emitter." },
+        "schedule_prob": { "type": "number", "minimum": 0, "maximum": 1, "description": "Duty-cycle probability for the noise Monte Carlo. Absent => engine default." },
+        "elementClass": { "enum": ["structural", "amenity", "equipment"], "description": "Structural floors/walls/doors get special handling." },
+        "subtype": { "enum": ["floor", "wall", "door"] },
+        "blocksMovement": { "type": "boolean", "description": "Explicit ADA/egress blocking override (wins over cat)." },
+
+        "footprintPolygon": {
+          "type": "array",
+          "description": "FORWARD-LOOKING (not yet consumed): true footprint outline in local %, for non-rectangular machines. V0 uses the w/h rectangle.",
+          "items": { "type": "object", "properties": { "x": { "type": "number" }, "y": { "type": "number" } } }
+        },
+        "clearanceZones": {
+          "type": "array",
+          "description": "E1 (v2.1.0) FORWARD-LOOKING first-class rotation-aware directional clearance zones (operator envelope, infeed/outfeed corridor, maintenance access, kickback cone, spark arc, door swing). Each rotates with the machine. See v2/ELEMENT_ATTRIBUTES.md (d).",
+          "items": { "$ref": "#/$defs/clearanceZone" }
+        },
+        "hazards": {
+          "type": "object",
+          "description": "E1 (v2.1.0) FORWARD-LOOKING hazard flags for future adjacency/separation objectives. Independent booleans (a machine may carry several at once); absent object or absent flag => false => no hazard declared => inert. See v2/ELEMENT_ATTRIBUTES.md (a).",
+          "additionalProperties": true,
+          "properties": {
+            "dustProducing":      { "type": "boolean", "default": false, "description": "Emits dust (NFPA 664 combustible-dust context)." },
+            "dustSensitive":      { "type": "boolean", "default": false, "description": "Degraded by dust (electronics/optics)." },
+            "sparkSource":        { "type": "boolean", "default": false, "description": "Produces sparks (NFPA 51B)." },
+            "hotWork":            { "type": "boolean", "default": false, "description": "Hot-work source (NFPA 51B)." },
+            "wetProcess":         { "type": "boolean", "default": false, "description": "Wet process (OSHA 1910.303 electrical-in-wet context)." },
+            "flammable":          { "type": "boolean", "default": false, "description": "Stores/uses flammables (NFPA 30 / OSHA 1910.106)." },
+            "vibrationSource":    { "type": "boolean", "default": false, "description": "Vibration source (no governing standard — design assumption)." },
+            "vibrationSensitive": { "type": "boolean", "default": false, "description": "Vibration-sensitive (metrology; design assumption)." },
+            "dust":  { "type": "boolean", "description": "DEPRECATED alias of dustProducing (v2.0.0 stub retained for back-compat)." },
+            "spark": { "type": "boolean", "description": "DEPRECATED alias of sparkSource (v2.0.0 stub retained)." },
+            "wet":   { "type": "boolean", "description": "DEPRECATED alias of wetProcess (v2.0.0 stub retained)." }
+          }
+        },
+        "power": {
+          "type": "object",
+          "description": "E1 FORWARD-LOOKING electrical requirements (nameplate; design assumption in the library).",
+          "additionalProperties": true,
+          "properties": {
+            "volts": { "type": "number", "description": "Nominal voltage (V)." },
+            "amps": { "type": "number", "description": "Nominal current draw (A)." },
+            "phase": { "enum": [1, 3], "description": "Single- or three-phase." }
+          }
+        },
+        "ventilation": {
+          "type": "object",
+          "description": "E1 FORWARD-LOOKING ventilation requirements (OSHA 1910.94; ACGIH Industrial Ventilation). Absent => none required => inert.",
+          "additionalProperties": true,
+          "properties": {
+            "localExhaustRequired":        { "type": "boolean", "default": false, "description": "Requires local exhaust ventilation." },
+            "cfm":                         { "type": ["number", "null"], "default": null, "description": "Exhaust airflow (ft^3/min) if known; null => unknown (design assumption)." },
+            "requiresExteriorWallOrDuct":  { "type": "boolean", "default": false, "description": "Must sit on an exterior wall or a duct drop (laser/welding exhaust)." }
+          }
+        },
+        "utilities": {
+          "type": "object",
+          "description": "E1 FORWARD-LOOKING utility requirements. Absent => none => inert.",
+          "additionalProperties": true,
+          "properties": {
+            "compressedAir": { "type": "boolean", "default": false },
+            "waterSupply":   { "type": "boolean", "default": false },
+            "floorDrain":    { "type": "boolean", "default": false }
+          }
+        },
+        "amenityLinks": {
+          "type": "array",
+          "description": "E1 FORWARD-LOOKING typed links from this machine to a required amenity type, each with a max distance/travel-time and a mode (Dr. Jariwala's user-definable typed-linkage design). Absent => no links => inert. See v2/ELEMENT_ATTRIBUTES.md (e).",
+          "items": { "$ref": "#/$defs/amenityLink" }
+        },
+        "occupancy": {
+          "type": "object",
+          "description": "E1 FORWARD-LOOKING occupancy for a future active-users metric. Defaults are inert.",
+          "additionalProperties": true,
+          "properties": {
+            "operatorCount":         { "type": "integer", "minimum": 0, "default": 1, "description": "Operators the machine supports concurrently." },
+            "personSpaceAreaUnits":  { "type": "number", "minimum": 0, "default": 15, "description": "Person-space area per operator (real units^2; design assumption)." },
+            "footprintsMayOverlap":  { "type": "boolean", "default": false, "description": "Whether operator footprints may overlap neighbors." }
+          }
+        },
+
+        "principalAxis": {
+          "type": "object",
+          "description": "Machine principal axis (rotation reference), consumed by scoring.js for vector/footprint rotation. RETAINED as-is; clearanceZones orientation is defined relative to it.",
+          "additionalProperties": true,
+          "properties": {
+            "angle":  { "type": "number", "description": "Axis angle in degrees." },
+            "length": { "type": "number", "description": "Axis length (stage-%; rendering)." }
+          }
+        },
+        "operatorFootprints": {
+          "type": "array",
+          "description": "Operator risk-zone footprints (rotation-aware), consumed by scoring.js. RETAINED. Each entry { type, offsetX, offsetY, ... } in stage-%.",
+          "items": { "type": "object", "additionalProperties": true }
+        },
+        "kickbackVectors": {
+          "type": "array",
+          "description": "EXISTING cone vectors consumed by scoring.js _scVectorConflicts (metrics/flags, NOT evaluateLayout). RETAINED. Each { type:'vector', offsetX, offsetY, angle, angleSpread }. The new clearanceZones (type kickbackCone) is a superset; keep a declared pair consistent (see ELEMENT_ATTRIBUTES.md (d) + GAPS).",
+          "items": { "type": "object", "additionalProperties": true }
+        },
+        "materialVectors": {
+          "type": "array",
+          "description": "EXISTING material-ejection cone vectors consumed by scoring.js. RETAINED (see kickbackVectors).",
+          "items": { "type": "object", "additionalProperties": true }
+        }
+      }
+    },
+
+    "machineInstance": {
+      "type": "object",
+      "required": ["id", "type"],
+      "additionalProperties": true,
+      "properties": {
+        "id": { "type": "string", "description": "Unique instance id (also the engine zone id)." },
+        "type": { "type": "string", "description": "Key into machineTypes." },
+        "x": { "type": "number", "description": "Top-left x, stage %. Default 50 if omitted." },
+        "y": { "type": "number", "description": "Top-left y, stage %. Default 50 if omitted." },
+        "w": { "type": "number", "description": "Footprint width override, stage % (else type.w)." },
+        "h": { "type": "number", "description": "Footprint height override, stage % (else type.h)." },
+        "rotation": { "type": "number", "description": "Rotation degrees about the footprint center. Default 0." },
+        "included": { "type": "boolean", "description": "FORWARD-LOOKING per-instance include toggle (V0 always true)." }
+      }
+    },
+
+    "clearanceZone": {
+      "type": "object",
+      "description": "E1 (v2.1.0) FORWARD-LOOKING first-class, rotation-aware, DIRECTIONAL clearance zone. Geometry is a parametric template OR an explicit machine-local polygon; orientation is relative to the machine's principal axis so it rotates with the machine (same convention as scoring.js). NOT consumed by any objective yet. See v2/ELEMENT_ATTRIBUTES.md (d). Back-compat: the v2.0.0 stub fields (direction/polygon/mode) are still accepted.",
+      "additionalProperties": true,
+      "required": ["type", "geometry"],
+      "properties": {
+        "id":   { "type": "string", "description": "Unique within the machine." },
+        "type": {
+          "enum": ["operatorEnvelope", "infeedCorridor", "outfeedCorridor", "maintenanceAccess", "kickbackCone", "sparkArc", "doorSwing"],
+          "description": "Clearance-zone kind."
+        },
+        "geometry": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Parametric template OR explicit machine-local polygon. Distances are real units (room.scale.unit).",
+          "properties": {
+            "kind":     { "enum": ["template", "polygon"] },
+            "template": { "enum": ["rect", "cone"], "description": "rect: {offsetUnits, alongUnits, acrossUnits}. cone: {apexOffsetUnits, spreadDeg, lengthUnits}." },
+            "params":   { "type": "object", "additionalProperties": true, "description": "Template numeric parameters (real units / degrees)." },
+            "points":   { "type": "array", "description": "kind=polygon: machine-local coords (real units), x along the principal axis.", "items": { "$ref": "#/$defs/point2d" } }
+          }
+        },
+        "severity":    { "enum": ["hard", "advisory"], "default": "advisory", "description": "hard = must-not-obstruct; advisory = penalty." },
+        "orientation": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Orientation relative to the machine principal axis (rotates with the machine).",
+          "properties": {
+            "relativeTo": { "const": "principalAxis" },
+            "angleDeg":   { "type": "number", "default": 0, "description": "Zone direction offset from the principal axis, degrees." }
+          }
+        },
+        "provenance": { "type": "string", "description": "Standard clause, published measurement, or 'design assumption'." },
+        "direction": { "enum": ["front", "back", "left", "right", "custom"], "description": "DEPRECATED v2.0.0 stub." },
+        "polygon":   { "type": "array", "description": "DEPRECATED v2.0.0 stub polygon.", "items": { "type": "object", "properties": { "x": { "type": "number" }, "y": { "type": "number" } } } },
+        "mode":      { "enum": ["strict", "advisory"], "description": "DEPRECATED v2.0.0 stub (use severity)." }
+      }
+    },
+
+    "amenityLink": {
+      "type": "object",
+      "description": "Typed link: a machine requires an amenity of amenityType within a max distance or travel time. E1 defined it on machineTypes; L1 (schema 2.3.0) CONSUMES it via the `amenityLinks` MOSA objective (v2/amenity-links.mjs). Two uses: on a machineType (that machine's built-in required links) and in the project-level `amenityLinks` array (a per-(machine,amenityType) OVERRIDE carrying a `machine` id/type). Path-based types (eyewash/fireExtinguisher) use engine-grid walking travel; others straight-line. See v2/AMENITY_LINKS.md.",
+      "additionalProperties": true,
+      "required": ["amenityType", "provenance"],
+      "properties": {
+        "machine": { "type": "string", "description": "Project-override only: the machine id or type this override applies to (ignored on a machineType's own amenityLinks)." },
+        "amenityType": {
+          "enum": ["eyewash", "fireExtinguisher", "fumeHood", "sink", "dustCollection", "flammablesCabinet", "firstAid", "shower"],
+          "description": "Required amenity type."
+        },
+        "maxDistanceUnits": { "type": ["number", "null"], "default": null, "description": "Max travel distance in real units (null => use maxTravelSeconds or unspecified)." },
+        "maxTravelSeconds": { "type": ["number", "null"], "default": null, "description": "Max travel time in seconds (e.g. eyewash 10 s per ANSI Z358.1)." },
+        "mode": { "enum": ["strict", "advisory"], "default": "advisory", "description": "strict = hard requirement; advisory = penalty." },
+        "provenance": { "type": "string", "description": "Standard clause (ANSI Z358.1, NFPA 10, ...) or 'design assumption'. REQUIRED." }
+      }
+    },
+
+    "adjacencyRule": {
+      "type": "object",
+      "description": "Pairwise adjacency relationship / override (v2 Phase N1, schema 2.2.0). CONSUMED by the `adjacency` MOSA objective (v2/adjacency.mjs). A project entry OVERRIDES the built-in rule-derived + explicit defaults for the named pair (precedence: user override > explicit default > rule-derived > NEUTRAL). Match is by machine `type` pair or instance `id` pair, unordered unless `directed`. The legacy relation/distanceUnits fields remain accepted. Every override SHOULD carry `provenance`.",
+      "required": ["a", "b"],
+      "additionalProperties": true,
+      "properties": {
+        "a": { "type": "string", "description": "Machine id or type." },
+        "b": { "type": "string", "description": "Machine id or type." },
+        "level": { "enum": ["PROHIBITED", "DISCOURAGED", "NEUTRAL", "SYNERGISTIC"], "description": "N1 relationship level. Overrides all defaults for this pair." },
+        "requiredSeparationUnits": { "type": "number", "description": "Required separation (real units) for PROHIBITED/DISCOURAGED, or ideal adjacency distance for SYNERGISTIC. Omitted => level default (35/10/5 ft)." },
+        "mode": { "enum": ["strict", "advisory"], "description": "N1: both contribute a penalty, strict weighted 5x (hard rejection deferred to R1). Omitted => level default (PROHIBITED->strict, else advisory)." },
+        "directed": { "type": "boolean", "default": false, "description": "true => applies only to the ordered (a,b) pair (asymmetric); default symmetric." },
+        "provenance": { "type": "string", "description": "Standard clause or 'design assumption' or a user note. Required in spirit; the objective records it in diagnostics for auditability." },
+        "relation": { "enum": ["near", "far", "min-distance", "max-distance"], "description": "LEGACY (pre-N1) relation form; still accepted, superseded by `level`." },
+        "distanceUnits": { "type": "number", "description": "LEGACY threshold (real units) for min/max-distance." }
+      }
+    },
+
+    "point2d": {
+      "type": "object",
+      "required": ["x", "y"],
+      "additionalProperties": false,
+      "properties": {
+        "x": { "type": "number", "description": "stage-% x (0..100)" },
+        "y": { "type": "number", "description": "stage-% y (0..100)" }
+      }
+    },
+
+    "wallSegment": {
+      "type": "object",
+      "description": "A wall segment between two endpoints (stage-%). Endpoints shared with other segments (within snapTol) knit the wall graph together.",
+      "required": ["id", "from", "to"],
+      "additionalProperties": true,
+      "properties": {
+        "id": { "type": "string", "description": "Unique wall id (referenced by doors, floors, zones)." },
+        "from": { "$ref": "#/$defs/point2d" },
+        "to": { "$ref": "#/$defs/point2d" },
+        "thickness": { "type": "number", "description": "Wall thickness in stage-% (geometry/rendering; default ~0.5)." },
+        "stc": { "type": "number", "description": "Sound Transmission Class / attenuation (dB). For later noise use; not consumed in G1." },
+        "blocksMovement": { "type": "boolean", "default": true, "description": "Whether the wall blocks circulation. Default true." }
+      }
+    },
+
+    "doorSegment": {
+      "type": "object",
+      "description": "A door: a permeable wall segment. It bounds a zone (for area/loop purposes) but is flagged as an opening. References the wall it lies on (or carries its own endpoints).",
+      "required": ["id", "from", "to"],
+      "additionalProperties": true,
+      "properties": {
+        "id": { "type": "string", "description": "Unique door id." },
+        "wall": { "type": "string", "description": "Id of the wall this door lies on (the wall is carved wall|door|wall). Optional if the door carries its own endpoints." },
+        "from": { "$ref": "#/$defs/point2d" },
+        "to": { "$ref": "#/$defs/point2d" },
+        "walkThrough": { "type": "boolean", "default": true, "description": "A door is permeable. Default true." },
+        "width": { "type": "number", "description": "Clear opening width in real units (for later ADA/egress use)." },
+        "role": {
+          "enum": ["interior-bridge", "exit-to-outside"],
+          "description": "interior-bridge: between two zones. exit-to-outside: on the outer contour. May be authored; the detector also computes it from which faces the door borders."
+        },
+        "zones": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Zone id(s) this door connects (1 for an exit, 2 for an interior bridge). Populated by the detector."
+        }
+      }
+    },
+
+    "floorRegion": {
+      "type": "object",
+      "description": "A floor: the region bounded by a closed loop of wall/door segments. 1:1 with a zone in G1.",
+      "required": ["id", "loop"],
+      "additionalProperties": true,
+      "properties": {
+        "id": { "type": "string" },
+        "zoneId": { "type": "string", "description": "The zone this floor is the region of." },
+        "loop": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Ordered closed loop of wall/door segment ids bounding the region."
+        }
+      }
+    },
+
+    "zoneRegion": {
+      "type": "object",
+      "description": "An enclosed zone. Knows its bounding walls (boundary) and doors; carries a per-zone attribute bag reserved for later sim use (noise/dust/etc), empty-but-present now.",
+      "required": ["id", "boundary"],
+      "additionalProperties": true,
+      "properties": {
+        "id": { "type": "string" },
+        "boundary": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Ordered loop of wall/door segment ids that enclose this zone."
+        },
+        "doors": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Door ids on this zone's boundary."
+        },
+        "polygonPct": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/point2d" },
+          "description": "Computed zone outline (stage-%)."
+        },
+        "areaUnits": { "type": "number", "description": "Computed area in real units^2 via room.scale." },
+        "isRoom": { "type": "boolean", "default": true, "description": "false if a user marked this detected zone as not-a-room." },
+        "attributes": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Per-zone attribute bag for later sim use (noise/dust/occupancy/etc). Empty-but-present in G1; no simulation reads it yet."
+        }
+      }
+    }
+  }
+}

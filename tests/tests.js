@@ -397,5 +397,217 @@ test("CONSTANTS: NOISE_MC_ITERATIONS is 500", () => {
   return { pass: NOISE_MC_ITERATIONS === 500 };
 });
 
+// ---------------------------------------------------------------------------
+// EVAL HARNESS TESTS
+// ---------------------------------------------------------------------------
+
+test("EVAL: evaluateLayout returns well-formed objective vector", () => {
+  _resetState();
+  // Add one exit and two equipment zones.
+  _addZone({ id: "exitA", cat: "exit" }, { x: 90, y: 40, w: 6, h: 20 });
+  _addZone({ id: "tool1", cat: "tool", dba_active: 90, schedule_prob: 0.8 }, { x: 10, y: 20, w: 10, h: 10 });
+  _addZone({ id: "tool2", cat: "tool", dba_active: 85, schedule_prob: 0.5 }, { x: 50, y: 50, w: 10, h: 10 });
+
+  const vec = evaluateLayout({}, 80, 50);
+  const hasFields = typeof vec.ada === "number" && typeof vec.egress === "number" && typeof vec.noise === "number";
+  const inRange   = vec.ada >= 0 && vec.ada <= 1 && vec.egress >= 0 && vec.egress <= 1 && vec.noise >= 0 && vec.noise <= 1;
+  return {
+    pass: hasFields && inRange,
+    detail: "ada=" + vec.ada.toFixed(3) + " egress=" + vec.egress.toFixed(3) + " noise=" + vec.noise.toFixed(3),
+  };
+});
+
+test("EVAL: ADA and Egress components are deterministic for the same layout", () => {
+  _resetState();
+  _addZone({ id: "exitA", cat: "exit" }, { x: 85, y: 40, w: 7, h: 20 });
+  _addZone({ id: "blockA", cat: "tool" }, { x: 10, y: 10, w: 12, h: 80 });
+  _addZone({ id: "blockB", cat: "tool" }, { x: 30, y: 10, w: 12, h: 80 });
+
+  const v1 = evaluateLayout({}, 80, 50);
+  const v2 = evaluateLayout({}, 80, 50);
+  const adaMatch    = v1.ada    === v2.ada;
+  const egressMatch = v1.egress === v2.egress;
+  return {
+    pass: adaMatch && egressMatch,
+    detail: "ada " + v1.ada.toFixed(4) + " vs " + v2.ada.toFixed(4) +
+            " | egress " + v1.egress.toFixed(4) + " vs " + v2.egress.toFixed(4),
+  };
+});
+
+test("EVAL: evaluateLayout restores state.zones after evaluation", () => {
+  _resetState();
+  _addZone({ id: "exitA", cat: "exit" }, { x: 80, y: 40, w: 8, h: 20 });
+  _addZone({ id: "mover", cat: "tool" }, { x: 20, y: 20, w: 10, h: 10 });
+
+  const xBefore = state.zones["mover"].x;
+  // Evaluate with the mover at a different position.
+  evaluateLayout({ mover: { x: 60, y: 60, w: 10, h: 10 } }, 80, 50);
+  const xAfter = state.zones["mover"].x;
+  return {
+    pass: xBefore === xAfter,
+    detail: "before=" + xBefore + " after=" + xAfter + " (should be unchanged)",
+  };
+});
+
+test("EVAL: evalObjective returns value in [0, 1] for any valid vector", () => {
+  const cases = [
+    { ada: 0,   egress: 0,   noise: 0   },
+    { ada: 1,   egress: 1,   noise: 1   },
+    { ada: 0.5, egress: 0.3, noise: 0.7 },
+    { ada: 0,   egress: 1,   noise: 0   },
+  ];
+  const pass = cases.every(v => {
+    const j = evalObjective(v);
+    return j >= 0 && j <= 1;
+  });
+  return { pass, detail: "all four test vectors produced J in [0, 1]" };
+});
+
+test("EVAL: evalDominates correctly identifies dominance", () => {
+  const better   = { ada: 0.1, egress: 0.2, noise: 0.3 };
+  const worse    = { ada: 0.2, egress: 0.3, noise: 0.4 };
+  const partial  = { ada: 0.2, egress: 0.1, noise: 0.3 };  // worse on ada, better on egress
+  const equal    = { ada: 0.1, egress: 0.2, noise: 0.3 };
+
+  const d1 = evalDominates(better, worse);    // should dominate
+  const d2 = evalDominates(worse, better);    // should not dominate
+  const d3 = evalDominates(better, partial);  // should not dominate (partial is better on egress)
+  const d4 = evalDominates(better, equal);    // should not dominate (equal is not strictly worse on any)
+
+  return {
+    pass: d1 && !d2 && !d3 && !d4,
+    detail: "better>worse=" + d1 + " worse>better=" + d2 + " better>partial=" + d3 + " better>equal=" + d4,
+  };
+});
+
+// ---------------------------------------------------------------------------
+// OPTIMIZER TESTS
+// ---------------------------------------------------------------------------
+
+test("OPT: optimizerMovableIds excludes fixed zones", () => {
+  _resetState();
+  // Mark two zones fixed (simulating entrance/exit), one movable.
+  ZONE_DEFS.push({ id: "fixedA", cat: "fixed", fixed: true, w: 5, h: 5 });
+  ZONE_DEFS.push({ id: "exitN",  cat: "exit",  fixed: true, w: 5, h: 5 });
+  ZONE_DEFS.push({ id: "tool1",  cat: "tool",  w: 8, h: 6 });
+  state.zones["fixedA"] = { x: 5,  y: 5,  w: 5, h: 5,  included: true, locked: false };
+  state.zones["exitN"]  = { x: 90, y: 90, w: 5, h: 5,  included: true, locked: false };
+  state.zones["tool1"]  = { x: 30, y: 30, w: 8, h: 6,  included: true, locked: false };
+
+  const movable = optimizerMovableIds();
+  const onlyMovable = movable.includes("tool1") && !movable.includes("fixedA") && !movable.includes("exitN");
+  return {
+    pass: onlyMovable,
+    detail: "movable=" + movable.join(",") + " (should be tool1 only)",
+  };
+});
+
+test("OPT: _nudgeLayout keeps positions within stage bounds", () => {
+  _resetState();
+  _addZone({ id: "toolA", cat: "tool" }, { x: 50, y: 50, w: 10, h: 10 });
+  const layout = { toolA: { x: 50, y: 50, w: 10, h: 10 } };
+  let allInBounds = true;
+  for (let i = 0; i < 50; i++) {
+    const nudged = _nudgeLayout(layout, "toolA", SA_STEP_MAX);
+    const pos = nudged["toolA"];
+    if (pos.x < 0 || pos.x + pos.w > 100 || pos.y < 0 || pos.y + pos.h > 100) {
+      allInBounds = false;
+      break;
+    }
+  }
+  return { pass: allInBounds, detail: "50 nudges with max step, all positions in [0, 100-w] x [0, 100-h]" };
+});
+
+test("OPT: _saRunSync archive is non-empty and baseline dominates no member", () => {
+  _resetState();
+  _addZone({ id: "exit1", cat: "exit" }, { x: 85, y: 40, w: 8, h: 20 });
+  _addZone({ id: "t1",    cat: "tool" }, { x: 5,  y: 10, w: 12, h: 70 });
+  _addZone({ id: "t2",    cat: "tool" }, { x: 20, y: 10, w: 12, h: 70 });
+  _addZone({ id: "t3",    cat: "tool" }, { x: 50, y: 20, w: 10, h: 10 });
+
+  const movable = ["t1", "t2", "t3"];
+  const { archive, baseline } = _saRunSync(movable, 80, 50, 100);
+
+  // MOSA guarantee: the archive is non-empty and the baseline does not
+  // strictly dominate any archive member (the archive only contains solutions
+  // that were at least incomparable to the baseline when they were inserted).
+  let baselineDominatesNone = true;
+  for (const m of archive) {
+    if (evalDominates(baseline, m.vec)) { baselineDominatesNone = false; break; }
+  }
+  return {
+    pass: archive.length > 0 && baselineDominatesNone,
+    detail: "archive size=" + archive.length + " baseline dominates none: " + baselineDominatesNone,
+  };
+});
+
+// ---------------------------------------------------------------------------
+// MOSA TESTS
+// ---------------------------------------------------------------------------
+
+test("MOSA: archive holds only mutually non-dominated solutions after a run", () => {
+  _resetState();
+  _addZone({ id: "exit1", cat: "exit" }, { x: 85, y: 40, w: 8, h: 20 });
+  _addZone({ id: "t1",    cat: "tool" }, { x: 5,  y: 10, w: 12, h: 70 });
+  _addZone({ id: "t2",    cat: "tool" }, { x: 20, y: 10, w: 12, h: 70 });
+  _addZone({ id: "t3",    cat: "tool" }, { x: 50, y: 20, w: 10, h: 10 });
+
+  const { archive } = _saRunSync(["t1", "t2", "t3"], 80, 50, 100);
+
+  let allNonDominated = true;
+  outer: for (let i = 0; i < archive.length; i++) {
+    for (let j = 0; j < archive.length; j++) {
+      if (i === j) continue;
+      if (evalDominates(archive[i].vec, archive[j].vec)) { allNonDominated = false; break outer; }
+    }
+  }
+  return {
+    pass: archive.length > 0 && allNonDominated,
+    detail: "archive size=" + archive.length + " mutually non-dominated: " + allNonDominated,
+  };
+});
+
+test("MOSA: seeded evaluateLayout gives identical vector for the same seed", () => {
+  _resetState();
+  _addZone({ id: "exit1", cat: "exit" },                                              { x: 85, y: 40, w: 8,  h: 20 });
+  _addZone({ id: "tool1", cat: "tool", dba_active: 90, schedule_prob: 0.7 }, { x: 20, y: 20, w: 10, h: 10 });
+  _addZone({ id: "tool2", cat: "tool", dba_active: 85, schedule_prob: 0.5 }, { x: 50, y: 50, w: 10, h: 10 });
+
+  const saved = Math.random;
+
+  Math.random = _makeLCG(0xABCD1234);
+  const v1 = evaluateLayout({}, 80, 50);
+
+  Math.random = _makeLCG(0xABCD1234);
+  const v2 = evaluateLayout({}, 80, 50);
+
+  Math.random = saved;
+
+  const match = v1.ada === v2.ada && v1.egress === v2.egress && v1.noise === v2.noise;
+  return {
+    pass: match,
+    detail: "v1=(" + v1.ada.toFixed(3) + "," + v1.egress.toFixed(3) + "," + v1.noise.toFixed(3) + ")" +
+            " v2=(" + v2.ada.toFixed(3) + "," + v2.egress.toFixed(3) + "," + v2.noise.toFixed(3) + ")",
+  };
+});
+
+test("MOSA: every archive member is non-dominated by the baseline", () => {
+  _resetState();
+  _addZone({ id: "exit1", cat: "exit" }, { x: 85, y: 40, w: 8, h: 20 });
+  _addZone({ id: "t1",    cat: "tool" }, { x: 5,  y: 10, w: 12, h: 70 });
+  _addZone({ id: "t2",    cat: "tool" }, { x: 20, y: 10, w: 12, h: 70 });
+
+  const { archive, baseline } = _saRunSync(["t1", "t2"], 80, 50, 100);
+
+  let noneBaseDominated = true;
+  for (const m of archive) {
+    if (evalDominates(baseline, m.vec)) { noneBaseDominated = false; break; }
+  }
+  return {
+    pass: archive.length > 0 && noneBaseDominated,
+    detail: "archive size=" + archive.length + " baseline dominates no member: " + noneBaseDominated,
+  };
+});
+
 // Run and render.
 renderResults();

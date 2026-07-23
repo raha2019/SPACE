@@ -1,0 +1,18 @@
+{
+  "$comment": "v2 Phase L1 rule-derived amenity-link defaults, from E1 hazard/ventilation flags, so any machine (incl. user-invented) requires sensible amenities automatically. Precedence: user override > explicit link (machine type's amenityLinks in the library) > rule-derived (below) > none. Each machine may require several amenities; nearest instance satisfies. path-based types use engine-grid walking travel (reused via the V0 seam); others use straight-line proximity. EVERY entry carries provenance (a standard clause or 'design assumption'). See v2/AMENITY_LINKS.md.",
+  "modeMultipliers": { "strict": 5, "advisory": 1 },
+  "walkSpeedFtPerSec": 5.5,
+  "pathBasedTypes": ["eyewash", "fireExtinguisher", "firstAid", "shower"],
+  "rules": [
+    { "id": "A1", "flags": ["sparkSource", "hotWork"], "amenityType": "fireExtinguisher", "requiredDistanceUnits": 75, "mode": "strict",
+      "provenance": "NFPA 10 (2022) §6.2.1.1 (Class A extinguisher, 75 ft travel distance)" },
+    { "id": "A2", "flags": ["wetProcess"], "amenityType": "eyewash", "requiredDistanceUnits": 55, "mode": "strict",
+      "provenance": "ANSI/ISEA Z358.1-2014 §4.5.2 (eyewash: 10 s / ~55 ft travel, unobstructed)" },
+    { "id": "A3", "flags": ["flammable"], "amenityType": "flammablesCabinet", "requiredDistanceUnits": 35, "mode": "advisory",
+      "provenance": "NFPA 30 / OSHA 1910.106 (flammable-liquid storage nearby); 35 ft = design assumption" },
+    { "id": "A4", "ventFlag": "localExhaustRequired", "amenityType": "fumeHood", "requiredDistanceUnits": 10, "mode": "advisory",
+      "provenance": "OSHA 1910.94 / ACGIH (local exhaust at process); 10 ft = design assumption" },
+    { "id": "A5", "flags": ["dustProducing"], "amenityType": "dustCollection", "requiredDistanceUnits": 30, "mode": "advisory",
+      "provenance": "NFPA 664 (dust-collection system); 30 ft duct run = design assumption" }
+  ]
+}

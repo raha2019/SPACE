@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>SPACE MOSA Tests</title>
+<style>
+  body { font-family: monospace; background: #12151c; color: #c8ccd4; padding: 24px; margin: 0; }
+  h1 { color: #a8b4c4; font-size: 16px; margin-bottom: 16px; }
+  .summary { font-size: 14px; font-weight: bold; margin-bottom: 12px; padding: 8px 12px; background: #1c2230; border-radius: 4px; }
+  .test-row { display: flex; gap: 12px; align-items: baseline; padding: 4px 0; border-bottom: 1px solid #202636; font-size: 12px; }
+  .test-row.pass .status { color: #3ab976; }
+  .test-row.fail .status { color: #e04848; }
+  .status { font-weight: bold; width: 36px; flex-shrink: 0; }
+  .detail { color: #888; font-size: 11px; flex-shrink: 0; }
+  .notice { font-size: 11px; color: #888; margin-bottom: 16px; padding: 8px; background: #1a1e2a; border-radius: 4px; }
+</style>
+</head>
+<body>
+<h1>SPACE MOSA Unit Tests</h1>
+<div class="notice">
+  Tests for sim_mosa.js (mosaOptimize, _mosaArchiveInsert, _mosaSampleWeights).
+  Open tests/index.html for the full simulation module test suite.
+  No server required -- open this file directly in a browser.
+</div>
+<div id="results">Loading...</div>
+
+<!-- Simulation modules -->
+<script src="../v1/js/sim_ada.js"></script>
+<script src="../v1/js/sim_egress.js"></script>
+<script src="../v1/js/sim_noise.js"></script>
+
+<!-- Browser stubs required by simulation modules -->
+<script>
+"use strict";
+
+/* sim_ui.js stubs */
+function simGetCanvas() { return document.createElement("canvas"); }
+function simShowError() {}
+function simShowAdaResults() {}
+function simShowEgressResults() {}
+function simShowNoiseResults() {}
+function simShowFireResults() {}
+function simShowFumesResults() {}
+function _simEsc(s) {
+  return String(s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+/* simBlockerFootprint: simple AABB, no rotation, sufficient for tests.
+   Mirrors the stub in tests/_node_runner.js. */
+function simBlockerFootprint(def, z, stageW, stageH) {
+  var cxf = (z.x + z.w / 2) / 100 * stageW;
+  var cyf = (z.y + z.h / 2) / 100 * stageH;
+  var hw  = z.w / 100 * stageW / 2;
+  var hh  = z.h / 100 * stageH / 2;
+  var x1 = cxf - hw, y1 = cyf - hh, x2 = cxf + hw, y2 = cyf + hh;
+  return {
+    test: function(xf, yf) { return xf >= x1 && xf <= x2 && yf >= y1 && yf <= y2; },
+    aabb: { x1: x1, y1: y1, x2: x2, y2: y2 },
+  };
+}
+
+/* Scope / room stubs (checked with typeof guards in egress/noise modules) */
+function pointInAnalysisScope() { return true; }
+function analysisScopeAreaUnits() { return null; }
+function roomScopeActive() { return false; }
+function getAnalysisRooms() { return []; }
+function roomPolygonPct() { return null; }
+
+/* Unit conversion: required by sim_noise._noiseRefDist() */
+function convertUnits(v, from, to) {
+  var M = { m: 1, meter: 1, meters: 1, ft: 0.3048, foot: 0.3048, feet: 0.3048 };
+  if (!M[from] || !M[to]) return v;
+  return v * M[from] / M[to];
+}
+function currentUnit() { return "ft"; }
+
+/* overlapArea and clamp: required by mosaOptimize's constraint helpers. */
+function overlapArea(a, b) {
+  var ix = Math.max(0, Math.min(a.x2, b.x2) - Math.max(a.x1, b.x1));
+  var iy = Math.max(0, Math.min(a.y2, b.y2) - Math.max(a.y1, b.y1));
+  return ix * iy;
+}
+function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+</script>
+
+<!-- Eval harness (requires sim modules above) -->
+<script src="../v1/js/sim_eval.js"></script>
+
+<!-- MOSA optimizer (requires sim_eval.js) -->
+<script src="../v1/js/sim_mosa.js"></script>
+
+<!-- State stubs and test runner (same interface as tests.js) -->
+<script>
+"use strict";
+
+/* Minimal global state stubs -- mirrors tests.js exactly. */
+var state = {
+  zones: {},
+  customElements: [],
+  structuralElements: [],
+  amenityElements: [],
+  scale: null,
+};
+
+var ZONE_DEFS = [];
+
+function allZoneDefs() {
+  return ZONE_DEFS
+    .concat(state.customElements)
+    .concat(state.structuralElements)
+    .concat(state.amenityElements);
+}
+
+function stageDimsUnits() {
+  if (!state.scale) return null;
+  return { w: state.scale.stageW_ft, h: state.scale.stageH_ft };
+}
+
+function _resetState() {
+  state.zones              = {};
+  state.customElements     = [];
+  state.structuralElements = [];
+  state.amenityElements    = [];
+  ZONE_DEFS.length         = 0;
+  state.scale = { stageW_ft: 80, stageH_ft: 50 };
+}
+
+function _addZone(def, pos) {
+  ZONE_DEFS.push(def);
+  state.zones[def.id] = Object.assign(
+    { x: 0, y: 0, w: def.w || 10, h: def.h || 10, included: true, rotation: 0, activeUse: false },
+    pos
+  );
+}
+
+/* Test runner */
+var _results = [];
+
+function test(name, fn) {
+  try {
+    var r = fn();
+    _results.push({ name: name, pass: !!r.pass, detail: r.detail || "" });
+  } catch (e) {
+    _results.push({ name: name, pass: false, detail: "Exception: " + e.message });
+  }
+}
+
+function renderResults() {
+  var el = document.getElementById("results");
+  if (!el) return;
+  var pass = 0, fail = 0;
+  var html = "";
+  for (var i = 0; i < _results.length; i++) {
+    var r = _results[i];
+    if (r.pass) pass++; else fail++;
+    var cls = r.pass ? "pass" : "fail";
+    html +=
+      '<div class="test-row ' + cls + '">' +
+        '<span class="status">' + (r.pass ? "PASS" : "FAIL") + "</span>" +
+        "<span>" + r.name + "</span>" +
+        (r.detail ? '<span class="detail">' + r.detail + "</span>" : "") +
+      "</div>";
+  }
+  el.innerHTML = '<div class="summary">' + pass + " passed, " + fail + " failed</div>" + html;
+}
+</script>
+
+<!-- MOSA test suite -->
+<script src="tests_mosa.js"></script>
+</body>
+</html>

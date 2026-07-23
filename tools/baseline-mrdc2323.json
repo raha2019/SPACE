@@ -1,0 +1,119 @@
+{
+  "comment": "Phase 2d FINAL FROZEN PIN (objective-grid-corrected, 2026-07-08). HARNESS_SEED=0x4D524443. Both FEASIBILITY (Phase 2c L-polygon via footInside) and OBJECTIVE EVALUATION (Phase 2d) now respect the 6-vertex L-polygon. The SE notch is represented as a structural wall (notch_blocker) so the ADA/egress/noise objective grids treat those cells as blocked/attenuated the same way they treat any wall — no engine edit. This is the WSC poster freeze. See supersession chain for the full history.",
+  "seed": "0x4D524443",
+  "date": "2026-07-08",
+  "freeze": "WSC poster — objective-grid-corrected final",
+  "geometry": "6-vertex L-polygon respected by BOTH feasibility (footInside) and objective grids (ADA/egress/noise via the notch wall).",
+  "iters": 4000,
+  "stage_note": "[A1] RESOLVED: 96.6 ft x 88.6 ft bounding box, 6-vertex L-shaped polygon, shoelace area 6278.8 sf. Source: GT MRDC drawing 1615813303111-2nd_floor_MRDC__3_.pdf, 9 pts/ft.",
+  "dba_source": "Real per-tool values from default-elements.json. Proxy (70 + 5*risk) removed in Phase 0, Task 5.",
+  "baselineVec": {
+    "ada":    0.13827363048035732,
+    "egress": 0.4275,
+    "noise":  0.40589569160997735
+  },
+  "front_length": 18,
+  "front_dominating": "18/18",
+  "enforced_run_summary": {
+    "note": "Objective-grid-corrected 4000-iter run at seed 0x4D524443. Baseline objectives now describe the real L-room (notch excluded/attenuated).",
+    "best_improvement_pct": { "ada": 10.2, "egress": 4.1, "noise": 58.4 },
+    "knee_display": { "ada": "13.83% -> 13.21%", "egress": "42.75% -> 41.25%", "noise": "40.59% -> 25.12%" },
+    "infeasible_pct": 50.6,
+    "infeasible_count": 2025,
+    "accepted": 1553,
+    "rejected": 422,
+    "archived": 86
+  },
+  "notch_blocker": {
+    "note": "Structural wall filling the excluded SE notch. Makes sim_ada/_egress mark those cells blocked (removed from the walkable/BFS grids) and sim_noise rasterize them into the STC grid (attenuation). Rect corner = L-polygon reflex vertex, extended to the stage edge. Defined in testcase/hub/mrdc2323-scale.json (notchBlockerDef); no engine edit.",
+    "id": "notch_mrdc2323",
+    "elementClass": "structural",
+    "subtype": "wall",
+    "cat": "wall",
+    "blocksMovement": true,
+    "rect_pct": { "x": 40.99378881987578, "y": 54.85327313769752, "w": 59.00621118012422, "h": 45.14672686230248 },
+    "grid_exclusion_probes": {
+      "legend": "ada/eg: 0=walkable 1=blocked 2=exit; stc: dB barrier",
+      "notch_open_cell_60_80":  { "ada": "0->1", "eg": "0->1", "stc": "0->35", "verdict": "excluded (flipped)" },
+      "notch_deep_cell_80_90":  { "ada": "0->1", "eg": "0->1", "stc": "0->35", "verdict": "excluded (flipped)" },
+      "notch_under_xr_47_83":   { "ada": "1->1", "eg": "1->1", "stc": "0->35", "verdict": "blocked (was under xr tool)" },
+      "interior_70_30":         { "ada": "0->0", "eg": "0->0", "stc": "0->0",  "verdict": "unchanged" },
+      "interior_10_90":         { "ada": "0->0", "eg": "0->0", "stc": "0->0",  "verdict": "unchanged" },
+      "pass": true
+    }
+  },
+  "objective_movement_vs_phase2c": {
+    "note": "Before (Phase 2c, objectives over full bounding box) -> After (Phase 2d, objectives over real L-room).",
+    "ada":    { "before": 0.10371186111291054, "after": 0.13827363048035732, "delta_pp": 3.46, "why": "notch cells removed from the ADA walkable-area denominator; failing cells are a larger fraction of the real floor." },
+    "egress": { "before": 0.3025, "after": 0.4275, "delta_pp": 12.50, "why": "the as-is exitS sits inside the excluded notch; walling the notch isolates it, leaving exitN as the effective exit and raising max travel distance." },
+    "noise":  { "before": 0.41678004535147395, "after": 0.40589569160997735, "delta_pp": -1.09, "why": "the notch wall (STC 35 dB) attenuates sound propagating into/through the notch, removing some action-level cells; noise denominator is the full grid by design, so this is attenuation, not cell-exclusion." },
+    "infeasible": { "before_pct": 50.6, "after_pct": 50.6, "before_count": 2024, "after_count": 2025, "why": "footInside (Phase 2c) already excluded the notch from feasibility; the blocker's collision effect is only the 0.3%-inset boundary sliver, so feasibility is essentially unchanged (+1 infeasible move). The front change is driven by the objective correction, not feasibility." },
+    "front": { "before": "10 (10/10)", "after": "18 (18/18)", "why": "the worse (more realistic) baseline leaves more headroom and the egress surface now varies with exit routing, so more non-dominated solutions are found; all still dominate the baseline." }
+  },
+  "noise_stability": {
+    "note": "Noise objective under the CORRECTED (Phase 2d) grids, 10 documented seeds. Values changed from Phase 2c because the notch wall attenuates propagation. ADA (13.83%) and egress (42.75%) are identical across all 10 seeds (seed-independent). Cite noise improvements against this mean (39.10%); cite determinism against the pinned value (40.59%, seed 0x4D524443).",
+    "under": "Phase 2d objective-grid-corrected",
+    "seeds": [
+      "0x4D524443", "0x00000001", "0x0000BEEF", "0x0000CAFE", "0x00001234",
+      "0x00005678", "0x00009ABC", "0x0000DEF0", "0x00002323", "0x00006275"
+    ],
+    "noise_values": [
+      0.40589569160997735, 0.3891156462585034, 0.37006802721088433, 0.3900226757369615, 0.38049886621315193,
+      0.4140589569160998, 0.3904761904761905, 0.3795918367346939, 0.39954648526077097, 0.3904761904761905
+    ],
+    "ada_values": [
+      0.13827363048035732, 0.13827363048035732, 0.13827363048035732, 0.13827363048035732, 0.13827363048035732,
+      0.13827363048035732, 0.13827363048035732, 0.13827363048035732, 0.13827363048035732, 0.13827363048035732
+    ],
+    "egress_values": [
+      0.4275, 0.4275, 0.4275, 0.4275, 0.4275, 0.4275, 0.4275, 0.4275, 0.4275, 0.4275
+    ],
+    "mean":   0.3909750566893424,
+    "min":    0.37006802721088433,
+    "max":    0.4140589569160998,
+    "sd":     0.012289245300413405,
+    "spread": 0.043990929705215454
+  },
+  "canary": {
+    "note": "ADA/egress checked against exact pinned values (±5 pp). Noise checked against the stability mean with tolerance = spread + 2 pp margin, computed from noise_stability. Tolerance recomputed for Phase 2d: spread 4.399 pp + 2 pp = 6.399 pp.",
+    "noise_reference_mean": 0.3909750566893424,
+    "noise_tolerance_pp": 6.399,
+    "ada_egress_tolerance_pp": 5
+  },
+  "superseded": [
+    {
+      "phase": "Phase 2c — polygon-enforced FEASIBILITY, objectives still over bounding box",
+      "pinned": "2026-07-08",
+      "superseded": "2026-07-08",
+      "reason": "Feasibility (footInside) respected the L-polygon, but evaluateLayout's ADA/egress/noise grids still iterated the full bounding box, counting the notch as usable floor. Superseded by the Phase 2d objective-grid correction (notch wall). Baseline moved 10.37/30.25/41.68 -> 13.83/42.75/40.59; front 10 -> 18.",
+      "iters": 4000,
+      "baselineVec": { "ada": 0.10371186111291054, "egress": 0.3025, "noise": 0.41678004535147395 },
+      "front_length": 10,
+      "front_dominating": "10/10",
+      "best_improvement_pct": { "ada": 12.2, "egress": 2.5, "noise": 58.5 },
+      "knee_display": { "ada": "10.37% -> 9.14%", "egress": "30.25% -> 30.25%", "noise": "41.68% -> 21.45%" },
+      "infeasible_pct": 50.6,
+      "noise_stability_mean": 0.3989569160997732,
+      "noise_stability_spread": 0.05260770975056689
+    },
+    {
+      "phase": "Phase 1 — bounding-box pin ([A1] resolved, but SE notch NOT enforced)",
+      "pinned": "2026-07-05",
+      "stability_added": "2026-07-07",
+      "superseded": "2026-07-08",
+      "reason": "The L-shaped floor zone was wiped from state.zones by the state.zones reset in mosa_validate.mjs, so getAnalysisRooms() returned [] and pointInAnalysisScope() degenerated to the full 96.6 x 88.6 ft bounding box. Feasibility never enforced the notch. Superseded by the polygon-enforced Phase 2c pin.",
+      "iters": 4000,
+      "baselineVec": { "ada": 0.10371186111291054, "egress": 0.3025, "noise": 0.41678004535147395 },
+      "front_length": 9,
+      "front_dominating": "9/9"
+    },
+    {
+      "phase": "Phase 0 — placeholder stage ([A1] unresolved)",
+      "comment": "Placeholder 100x75 ft stage. Superseded 2026-07-05.",
+      "iters": 1120,
+      "stage_note": "[A1] placeholder: 100 ft x 75 ft",
+      "baselineVec": { "ada": 0.11488612526221156, "egress": 0.2975, "noise": 0.45631578947368423 },
+      "front_length": 10
+    }
+  ]
+}

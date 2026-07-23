@@ -1,0 +1,206 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="750" viewBox="0 0 1200 750">
+  <defs>
+    <style>
+      .wall { fill: #333; }
+      .room-fill { fill: #fafaf8; }
+      .shop-fill { fill: #f4f2ee; }
+      .open-fill { fill: #eef5f0; }
+      .corridor-fill { fill: #fef8e8; }
+      .zone-box { fill: white; stroke: #bbb; stroke-width: 1; }
+      .zone-hi { fill: #fff3cd; stroke: #c8a000; stroke-width: 1; }
+      .zone-crit { fill: #ffe5e5; stroke: #c00; stroke-width: 1; }
+      .zone-exit { fill: #e5f5e5; stroke: #2a7a2a; stroke-width: 1.5; }
+      .zone-label { font-family: Arial, sans-serif; font-size: 8px; fill: #333; text-anchor: middle; dominant-baseline: central; }
+      .region-label { font-family: Arial, sans-serif; font-size: 10px; fill: #666; font-style: italic; text-anchor: middle; }
+      .dim-label { font-family: Arial, sans-serif; font-size: 8px; fill: #888; text-anchor: middle; }
+      .title-text { font-family: Arial, sans-serif; font-size: 12px; fill: #222; }
+      .note-text { font-family: Arial, sans-serif; font-size: 9px; fill: #666; }
+      .door-arc { fill: none; stroke: #555; stroke-width: 1.2; }
+    </style>
+  </defs>
+
+  <!-- Page background -->
+  <rect width="1200" height="750" fill="#ededea"/>
+
+  <!-- ── TITLE BLOCK ── -->
+  <rect x="10" y="706" width="1180" height="36" fill="#dddbd5" stroke="#999" stroke-width="0.5"/>
+  <text x="20" y="720" class="title-text" font-weight="bold">GEORGIA TECH INVENTION STUDIO — TEST FLOOR PLAN</text>
+  <text x="20" y="733" class="note-text">PROTOTYPE / TEST ASSET — Not to scale. Import via SPACE → Import Project wizard. Calibrate scale to 80 ft × 50 ft.</text>
+  <text x="980" y="720" class="note-text">Drawing: TEST-FP-001</text>
+  <text x="980" y="733" class="note-text">Canvas: 80 ft × 50 ft (landscape)</text>
+
+  <!-- ── OUTER BUILDING WALLS ── -->
+  <!-- Outer shell: 10,10 → 1190,700 (fills to just above title block) -->
+  <rect x="10" y="10" width="1180" height="695" fill="white" stroke="#333" stroke-width="8"/>
+
+  <!-- ── REGION FILLS (painted before walls) ── -->
+  <!-- Dense Main Shop: x=1%→52%, y=1%→97% → x=22→624, y=17→688 -->
+  <rect x="22" y="17" width="600" height="672" class="shop-fill"/>
+  <!-- Connector Corridor: x=52%→63%, y=1%→97% → x=624→756, y=17→688 -->
+  <rect x="624" y="17" width="132" height="672" class="corridor-fill"/>
+  <!-- Right-Side Open Area: x=63%→97%, y=1%→97% → x=756→1178, y=17→688 -->
+  <rect x="756" y="17" width="420" height="672" class="open-fill"/>
+
+  <!-- ── INTERIOR WALLS ── -->
+  <!-- Main Shop / Connector boundary -->
+  <rect x="620" y="17" width="6" height="672" class="wall"/>
+  <!-- Connector / Right Open boundary -->
+  <rect x="752" y="17" width="6" height="672" class="wall"/>
+
+  <!-- Short wall: top of metal bay (x=22, y=200, width≈200) -->
+  <rect x="22" y="196" width="4" height="100" class="wall"/>
+  <rect x="22" y="196" width="190" height="4" class="wall"/>
+
+  <!-- Welding / Waterjet partition (top row, ~y=17 to 130) -->
+  <rect x="190" y="17" width="4" height="115" class="wall"/>
+  <rect x="335" y="17" width="4" height="115" class="wall"/>
+
+  <!-- Corridor partition at bottom -->
+  <rect x="168" y="660" width="530" height="4" class="wall"/>
+
+  <!-- ── ZONE BOXES ── -->
+  <!-- STORAGE: x=4%,y=4%,w=9ft,h=7ft → px: x=57,y=37, w=133,h=95 -->
+  <rect x="57" y="37" width="133" height="95" class="zone-box"/>
+  <text x="124" y="85" class="zone-label">Storage</text>
+
+  <!-- WELDING: x=16%,y=4%,w=9,h=6 → px: x=199,y=37, w=133,h=81 -->
+  <rect x="199" y="37" width="133" height="81" class="zone-crit"/>
+  <text x="266" y="78" class="zone-label" fill="#900">Welding</text>
+  <text x="266" y="88" class="zone-label" fill="#900">⚠ Risk 5</text>
+
+  <!-- WATERJET: x=28%,y=4%,w=9,h=6 → px: x=340,y=37, w=133,h=81 -->
+  <rect x="340" y="37" width="133" height="81" class="zone-crit"/>
+  <text x="407" y="78" class="zone-label" fill="#900">Waterjet</text>
+  <text x="407" y="88" class="zone-label" fill="#900">⚠ Risk 5</text>
+
+  <!-- METAL: x=4%,y=14%,w=10,h=7 → px: x=57,y=105, w=148,h=95 -->
+  <rect x="57" y="105" width="148" height="95" class="zone-crit"/>
+  <text x="131" y="153" class="zone-label" fill="#900">Metal Room</text>
+  <text x="131" y="163" class="zone-label" fill="#900">⚠ Risk 4</text>
+
+  <!-- CNC: x=42%,y=18%,w=9,h=7 → px: x=506,y=132, w=133,h=95 -->
+  <rect x="506" y="132" width="133" height="95" class="zone-hi"/>
+  <text x="573" y="180" class="zone-label">CNC</text>
+  <text x="573" y="190" class="zone-label">Risk 4</text>
+
+  <!-- 3D PRINT: x=18%,y=30%,w=10,h=6 → px: x=222,y=213, w=148,h=81 -->
+  <rect x="222" y="213" width="148" height="81" class="zone-hi"/>
+  <text x="296" y="254" class="zone-label">3D Printing</text>
+  <text x="296" y="264" class="zone-label">Risk 3</text>
+
+  <!-- WOOD: x=14%,y=38%,w=9,h=6 → px: x=175,y=268, w=133,h=81 -->
+  <rect x="175" y="268" width="133" height="81" class="zone-hi"/>
+  <text x="242" y="309" class="zone-label">Wood Room</text>
+  <text x="242" y="319" class="zone-label">Risk 4</text>
+
+  <!-- LASER: x=32%,y=38%,w=9,h=6 → px: x=388,y=268, w=133,h=81 -->
+  <rect x="388" y="268" width="133" height="81" class="zone-hi"/>
+  <text x="455" y="309" class="zone-label">Laser Cutting</text>
+  <text x="455" y="319" class="zone-label">Risk 4</text>
+
+  <!-- ASM1: x=18%,y=48%,w=11,h=6 → px: x=222,y=335, w=162,h=81 -->
+  <rect x="222" y="335" width="162" height="81" class="zone-box"/>
+  <text x="303" y="376" class="zone-label">Assembly 1</text>
+  <text x="303" y="386" class="zone-label">Risk 2</text>
+
+  <!-- ASM2: x=31%,y=48%,w=11,h=6 → px: x=376,y=335, w=162,h=81 -->
+  <rect x="376" y="335" width="162" height="81" class="zone-box"/>
+  <text x="457" y="376" class="zone-label">Assembly 2</text>
+  <text x="457" y="386" class="zone-label">Risk 2</text>
+
+  <!-- ENTRANCE: x=1.5%,y=62%,w=7,h=5.5 → px: x=28,y=430, w=103,h=75 -->
+  <rect x="28" y="430" width="103" height="75" class="zone-exit"/>
+  <text x="80" y="468" class="zone-label" fill="#2a7a2a">Entrance</text>
+  <line x1="28" y1="505" x2="28" y2="455" stroke="#2a7a2a" stroke-width="2"/>
+  <path d="M 28 455 A 50 50 0 0 1 78 505" class="door-arc" stroke="#2a7a2a"/>
+
+  <!-- MAIN DESK: x=9.5%,y=60%,w=7.5,h=5.5 → px: x=122,y=417, w=111,h=75 -->
+  <rect x="122" y="417" width="111" height="75" class="zone-box"/>
+  <text x="178" y="455" class="zone-label">Main Desk</text>
+  <text x="178" y="465" class="zone-label">Risk 1</text>
+
+  <!-- ELECTRONICS: x=30%,y=64%,w=9,h=6 → px: x=364,y=444, w=133,h=81 -->
+  <rect x="364" y="444" width="133" height="81" class="zone-hi"/>
+  <text x="431" y="485" class="zone-label">Electronics</text>
+  <text x="431" y="495" class="zone-label">/ Soldering — Risk 3</text>
+
+  <!-- BIKE: x=7%,y=80%,w=9,h=6 → px: x=93,y=552, w=133,h=81 -->
+  <rect x="93" y="552" width="133" height="81" class="zone-box"/>
+  <text x="160" y="593" class="zone-label">Bike / Mechanical</text>
+  <text x="160" y="603" class="zone-label">Risk 2</text>
+
+  <!-- CRAFTLAND: x=34%,y=80%,w=9,h=7 → px: x=411,y=552, w=133,h=95 -->
+  <rect x="411" y="552" width="133" height="95" class="zone-box"/>
+  <text x="478" y="600" class="zone-label">Craftland</text>
+  <text x="478" y="610" class="zone-label">Risk 1</text>
+
+  <!-- XR: x=44%,y=80%,w=7,h=6 → px: x=529,y=552, w=103,h=81 -->
+  <rect x="529" y="552" width="103" height="81" class="zone-box"/>
+  <text x="581" y="593" class="zone-label">XR</text>
+  <text x="581" y="603" class="zone-label">Risk 1</text>
+
+  <!-- CORRIDOR: x=14%,y=94%,w=36,h=4 → px: x=175,y=647, w=531,h=54 -->
+  <rect x="175" y="647" width="531" height="45" fill="#e8e4d8" stroke="#aaa" stroke-width="1"/>
+  <text x="441" y="670" class="zone-label" fill="#666">Main Corridor</text>
+
+  <!-- CONNECTOR: x=53%,y=18%,w=7,h=... → shown as the region shade band already -->
+  <!-- Just add a label -->
+  <text x="688" y="400" class="region-label" transform="rotate(-90,688,400)">Connector</text>
+
+  <!-- RIGHT OPEN AREA label -->
+  <text x="960" y="370" class="region-label">Right-Side</text>
+  <text x="960" y="385" class="region-label">Open Area</text>
+
+  <!-- EXIT NORTH: x=91.5%,y=2%,w=6.5,h=4.5 → px: x=1090,y=24, w=96,h=61 -->
+  <rect x="1090" y="14" width="96" height="55" class="zone-exit"/>
+  <text x="1138" y="42" class="zone-label" fill="#2a7a2a">Exit North</text>
+  <line x1="1186" y1="14" x2="1186" y2="60" stroke="#2a7a2a" stroke-width="2"/>
+  <path d="M 1186 14 A 46 46 0 0 0 1140 60" class="door-arc" stroke="#2a7a2a"/>
+
+  <!-- EXIT SOUTH: x=91.5%,y=81%,w=6.5,h=4.5 → px: x=1090,y=559, w=96,h=61 -->
+  <rect x="1090" y="559" width="96" height="55" class="zone-exit"/>
+  <text x="1138" y="587" class="zone-label" fill="#2a7a2a">Exit South</text>
+  <line x1="1186" y1="559" x2="1186" y2="614" stroke="#2a7a2a" stroke-width="2"/>
+  <path d="M 1186 614 A 46 46 0 0 1 1140 568" class="door-arc" stroke="#2a7a2a"/>
+
+  <!-- ── REGION LABELS ── -->
+  <text x="310" y="710" class="dim-label">◀──────────── Dense Main Shop (≈ 52% of width) ────────────▶</text>
+  <text x="688" y="710" class="dim-label">Connector</text>
+  <text x="960" y="710" class="dim-label">◀──── Right-Side Open Area ────▶</text>
+
+  <!-- ── NORTH ARROW ── -->
+  <g transform="translate(1150,660)">
+    <circle cx="0" cy="0" r="18" fill="white" stroke="#555" stroke-width="1.2"/>
+    <polygon points="0,-14 5,4 0,0 -5,4" fill="#333"/>
+    <polygon points="0,14 5,-4 0,0 -5,-4" fill="#ccc"/>
+    <text x="0" y="-18" font-family="Arial" font-size="8" fill="#333" text-anchor="middle">N</text>
+  </g>
+
+  <!-- ── DIMENSION LINES ── -->
+  <!-- Width: 80 ft -->
+  <line x1="10" y1="4" x2="1190" y2="4" stroke="#555" stroke-width="1"/>
+  <line x1="10" y1="2" x2="10" y2="8" stroke="#555" stroke-width="1"/>
+  <line x1="1190" y1="2" x2="1190" y2="8" stroke="#555" stroke-width="1"/>
+  <text x="600" y="8" class="dim-label">80 ft (calibrated)</text>
+
+  <!-- Height: 50 ft -->
+  <line x1="4" y1="10" x2="4" y2="700" stroke="#555" stroke-width="1"/>
+  <line x1="2" y1="10" x2="8" y2="10" stroke="#555" stroke-width="1"/>
+  <line x1="2" y1="700" x2="8" y2="700" stroke="#555" stroke-width="1"/>
+  <text x="4" y="360" class="dim-label" transform="rotate(-90,4,360)">50 ft (calibrated)</text>
+
+  <!-- ── LEGEND ── -->
+  <rect x="760" y="550" width="260" height="130" fill="white" stroke="#ccc" stroke-width="0.8" rx="3"/>
+  <text x="890" y="568" font-family="Arial" font-size="9" font-weight="bold" fill="#333" text-anchor="middle">LEGEND</text>
+  <rect x="775" y="575" width="14" height="10" class="zone-exit"/>
+  <text x="796" y="584" font-family="Arial" font-size="8" fill="#333">Emergency Exit / Entrance</text>
+  <rect x="775" y="592" width="14" height="10" class="zone-crit"/>
+  <text x="796" y="601" font-family="Arial" font-size="8" fill="#333">High/V-High Risk Zone (4–5)</text>
+  <rect x="775" y="609" width="14" height="10" class="zone-hi"/>
+  <text x="796" y="618" font-family="Arial" font-size="8" fill="#333">Moderate Risk Zone (3–4)</text>
+  <rect x="775" y="626" width="14" height="10" class="zone-box"/>
+  <text x="796" y="635" font-family="Arial" font-size="8" fill="#333">Low Risk Zone (0–2)</text>
+  <rect x="775" y="643" width="14" height="10" fill="#e8e4d8" stroke="#aaa" stroke-width="1"/>
+  <text x="796" y="652" font-family="Arial" font-size="8" fill="#333">Corridor / Circulation</text>
+  <text x="890" y="672" font-family="Arial" font-size="7" fill="#999" text-anchor="middle">Positions are illustrative — calibrate in SPACE</text>
+</svg>

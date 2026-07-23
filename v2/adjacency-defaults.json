@@ -1,0 +1,39 @@
+{
+  "$comment": "v2 Phase N1 built-in tool-adjacency defaults. rules[] are rule-derived from E1 hazard flags (so any machine, incl. user-invented, gets sensible relationships); pairs[] are explicit type-pair defaults (SLP workflow chains). Precedence: user override > explicit pair > rule-derived > NEUTRAL. Conflicting rules: most-severe level wins, most-conservative (max) required separation. EVERY entry carries provenance: a standard clause or the literal 'design assumption'. See v2/ADJACENCY.md.",
+  "levelWeights": { "PROHIBITED": 10, "DISCOURAGED": 3, "SYNERGISTIC": 1, "NEUTRAL": 0 },
+  "modeMultipliers": { "strict": 5, "advisory": 1 },
+  "defaultRequiredSeparationUnits": { "PROHIBITED": 35, "DISCOURAGED": 10, "SYNERGISTIC": 5 },
+  "defaultMode": { "PROHIBITED": "strict", "DISCOURAGED": "advisory", "SYNERGISTIC": "advisory", "NEUTRAL": "advisory" },
+  "synergy": { "idealUnits": 5, "spanUnits": 30 },
+  "unit": "ft",
+  "rules": [
+    { "id": "R1", "aFlags": ["sparkSource", "hotWork"], "bFlags": ["dustProducing"], "level": "PROHIBITED", "requiredSeparationUnits": 35, "mode": "strict",
+      "provenance": "NFPA 51B §5.6 + OSHA 1910.252(a) (hot work: 35 ft combustible clearance); NFPA 664 (wood dust is combustible)" },
+    { "id": "R2", "aFlags": ["sparkSource", "hotWork"], "bFlags": ["flammable"], "level": "PROHIBITED", "requiredSeparationUnits": 35, "mode": "strict",
+      "provenance": "NFPA 51B §5.6, OSHA 1910.252(a); NFPA 30 (flammable liquids)" },
+    { "id": "R3", "aFlags": ["sparkSource", "hotWork"], "bFlags": ["dustCollection"], "level": "PROHIBITED", "requiredSeparationUnits": 35, "mode": "strict",
+      "provenance": "NFPA 51B §5.6; NFPA 664 (dust-collection systems accumulate combustible dust)" },
+    { "id": "R4", "aFlags": ["sparkSource", "hotWork"], "bFlags": ["flammableTextile"], "level": "PROHIBITED", "requiredSeparationUnits": 35, "mode": "strict",
+      "provenance": "NFPA 51B §5.6 (hot work near combustibles); textile-specific distance = design assumption" },
+    { "id": "R5", "aFlags": ["sprayFinishing"], "bFlags": ["sparkSource", "hotWork"], "level": "PROHIBITED", "requiredSeparationUnits": 20, "mode": "strict",
+      "provenance": "NFPA 33 §6, OSHA 1910.107(c) (spray finishing: 20 ft from ignition sources)" },
+    { "id": "R6", "aFlags": ["wetProcess"], "bFlags": ["dustSensitive"], "level": "PROHIBITED", "requiredSeparationUnits": 10, "mode": "strict",
+      "provenance": "OSHA 1910.303(b)/1910.305(j) (electrical equipment in wet locations); dustSensitive->electronics proxy and 10 ft = design assumptions" },
+    { "id": "R7", "aFlags": ["dustProducing"], "bFlags": ["dustSensitive"], "level": "DISCOURAGED", "requiredSeparationUnits": 10, "mode": "advisory",
+      "provenance": "design assumption (dust contamination of sensitive equipment); NFPA 664 context" },
+    { "id": "R8", "aFlags": ["vibrationSource"], "bFlags": ["vibrationSensitive"], "level": "DISCOURAGED", "requiredSeparationUnits": 10, "mode": "advisory",
+      "provenance": "design assumption (vibration degrades precision/metrology)" }
+  ],
+  "pairs": [
+    { "a": "bandSaw", "b": "tableSaw", "level": "SYNERGISTIC", "mode": "advisory",
+      "provenance": "design assumption (SLP workflow adjacency: rough cut -> precision cut)" },
+    { "a": "tableSaw", "b": "assemblyTable", "level": "SYNERGISTIC", "mode": "advisory",
+      "provenance": "design assumption (SLP workflow adjacency: breakdown -> assembly)" },
+    { "a": "assemblyTable", "b": "sander", "level": "SYNERGISTIC", "mode": "advisory",
+      "provenance": "design assumption (SLP workflow adjacency: assembly -> finishing)" },
+    { "a": "printer3d", "b": "sander", "level": "SYNERGISTIC", "mode": "advisory",
+      "provenance": "design assumption (SLP workflow adjacency: 3D print -> post-processing)" },
+    { "a": "cncMill", "b": "electronicsBench", "level": "SYNERGISTIC", "mode": "advisory",
+      "provenance": "design assumption (SLP workflow adjacency: PCB mill near electronics bench)" }
+  ]
+}

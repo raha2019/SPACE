@@ -1,0 +1,67 @@
+{
+  "comment": "MRDC 2323 (Georgia Tech Invention Studio) real geometry. Derived from testcase/hub_real/layout.json which was traced from the GT MRDC architectural drawing at 9 pts/ft. Resolves [A1] in mosa_validate.mjs.",
+  "provenance": {
+    "source_file": "testcase/hub_real/layout.json",
+    "source_drawing": "GT MRDC drawing 1615813303111-2nd_floor_MRDC__3_.pdf",
+    "scale_from_drawing": "9 pts/ft",
+    "date_derived": "2026-07-05",
+    "derivation": "stageWidthPx = 96.6 ft * 9 pts/ft = 869.4 px; stageHeightPx = 88.6 ft * 9 pts/ft = 797.4 px"
+  },
+  "pxPerUnit": 9,
+  "unit": "ft",
+  "stageWidthPx": 869.4,
+  "stageHeightPx": 797.4,
+  "check_width_ft": 96.6,
+  "check_height_ft": 88.6,
+  "check_width_computed": "869.4 / 9 = 96.6 ft PASS",
+  "check_height_computed": "797.4 / 9 = 88.6 ft PASS",
+  "check_bbox_area_sf": 8558.76,
+  "check_polygon_area_sf_layout_json": 6275,
+  "check_polygon_area_sf_shoelace_exact": 6278.76,
+  "check_polygon_area_tolerance_pct": 0.06,
+  "check_polygon_area_verdict": "PASS (within 0.6% tolerance stated in layout.json)",
+  "polygon_vertex_count": 6,
+  "polygon_note": "L-shaped floor plan. SE notch at x > 39.6 ft, y > 48.6 ft (right-angle simplification of original 9-ft diagonal notch per layout.json note).",
+  "polygon_vertices_ft": [
+    [0.0,  0.0],
+    [96.6, 0.0],
+    [96.6, 48.6],
+    [39.6, 48.6],
+    [39.6, 88.6],
+    [0.0,  88.6]
+  ],
+  "floorDef": {
+    "id": "floor_mrdc2323",
+    "label": "MRDC 2323 Floor Boundary (L-shaped)",
+    "elementClass": "structural",
+    "subtype": "floor",
+    "w": 100,
+    "h": 100,
+    "shapes": [
+      {
+        "type": "polygon",
+        "points": [
+          {"x":  0,               "y":  0             },
+          {"x": 100,              "y":  0             },
+          {"x": 100,              "y": 54.85327313769752},
+          {"x": 40.99378881987578,"y": 54.85327313769752},
+          {"x": 40.99378881987578,"y": 100            },
+          {"x":  0,               "y": 100            }
+        ]
+      }
+    ]
+  },
+  "notchBlockerNote": "Phase 2d: structural wall filling the SE notch (the region the L-polygon excludes). Makes the ADA/egress/noise objective grids treat notch cells as blocked/attenuated the same way they treat any wall, so reported objectives describe the real L-room rather than the bounding box. Rect corner = polygon reflex vertex (40.99378881987578%, 54.85327313769752%), extended to the stage edge (100,100). subtype=wall + cat=wall + blocksMovement=true so sim_ada/_egress block it and sim_noise rasterizes it into the STC grid; no engine edit.",
+  "notchBlockerDef": {
+    "id": "notch_mrdc2323",
+    "label": "MRDC 2323 SE Notch (outside room)",
+    "elementClass": "structural",
+    "subtype": "wall",
+    "cat": "wall",
+    "blocksMovement": true,
+    "x": 40.99378881987578,
+    "y": 54.85327313769752,
+    "w": 59.00621118012422,
+    "h": 45.14672686230248
+  }
+}
