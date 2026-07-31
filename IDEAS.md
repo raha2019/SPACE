@@ -2,6 +2,20 @@
 
 Potential improvements and future features. Not bugs (see [BUGS.md](BUGS.md) for those).
 
+## Deferred from the v3 Floor Plan Builder integration (2026-07-29)
+
+Saved to revisit after the current editor-tooling pass (Ctrl-pan, auto-import
+image/scale, curve tool) and the user's first room build:
+
+- **Egress exits from the builder.** Builder doors convert to *passable* `subtype:"door"`
+  elements but are **not** egress `cat:"exit"` seeds, so egress reports 0 exits / 0 travel
+  distance on a builder-only plan. Add a way to tag a door as a building **exit** in the
+  editor and have `fpbApplyPlan()` (v3/js/fpb_bridge.js) emit exit seeds for those.
+- **Refine simulation/planning tools** now that plans drive all five sims (post-integration).
+- **Tutorials / documentation** — walkthroughs for drawing a plan → applying → running sims.
+- **Window fidelity.** Windows are approximated as movement-blocking wall infills with a
+  lower STC (28); consider a dedicated window element type.
+
 ## Structural Floor element — expanded uses
 
 The floor element is currently a non-blocking, transparent bordered area with a label

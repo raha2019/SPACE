@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "space-v3",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-u", ".claude/serve_v3.py"],
+      "port": 8123,
+      "url": "http://127.0.0.1:8123"
+    }
+  ]
+}
