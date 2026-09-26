@@ -894,8 +894,13 @@ function wireConfigImport(){
     if(f) importConfigFromFile(f);
     input.value = "";
   });
-  // Status-bar interactions
-  document.getElementById("csClear").addEventListener("click", clearConfig);
+  // Status-bar interactions. Clear buttons confirm first so an imported
+  // floor plan / configuration can't be wiped from the scene by accident.
+  document.getElementById("csClear").addEventListener("click", () => {
+    if(!state.imports.config && !state.config) return;
+    if(confirm("Clear the imported configuration and remove it from the scene?\n\nThis reverts the loaded configuration (and its scale source). It can't be undone."))
+      clearConfig();
+  });
   document.getElementById("cfgCollapse").addEventListener("click", ()=>{
     document.getElementById("configStatus").classList.toggle("collapsed");
   });
@@ -904,7 +909,11 @@ function wireConfigImport(){
     document.getElementById("floorPlanStatus").classList.toggle("collapsed");
   });
   document.getElementById("fpDownload").addEventListener("click", downloadImportedFloorPlan);
-  document.getElementById("fpClear").addEventListener("click", clearImportedFloorPlan);
+  document.getElementById("fpClear").addEventListener("click", () => {
+    if(!state.imports.floorPlan) return;
+    if(confirm("Clear the imported floor plan and remove it from the scene?\n\nThis removes the floor-plan image and its scale. It can't be undone."))
+      clearImportedFloorPlan();
+  });
   document.getElementById("fpRecalibrate").addEventListener("click", ()=>{
     if(!state.imports.floorPlan){ alert("No floor plan imported."); return; }
     openCalibrationModal(state.imports.floorPlan, /*recalibrate*/ true);

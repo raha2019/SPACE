@@ -50,6 +50,7 @@
        inputs remain because the wizard triggers them. -->
   <input type="file" id="importConfigInput" accept="application/json,.json" style="display:none" />
   <button class="btn ghost" id="elementBuilderBtn" title="Create custom elements with name, risk level, and default size.">Element Builder</button>
+  <button class="btn ghost" id="engineOpenBtn" title="Open the new feet-native Layout Engine (re-platform preview): draw walls/rooms and place tools as movable objects.">🧭 Layout Engine (beta)</button>
   <button class="btn ghost" id="optimizeLayoutBtn" title="Auto-arrange the included, non-fixed elements inside a room to improve the weighted safety/quality score.">✦ Optimize Layout</button>
   <button class="btn ghost" id="resetBtn">Reset Layout</button>
   <button class="btn ghost" id="resetDashboardBtn" title="Reset all widget positions and sizes to the default dashboard arrangement.">Reset Widgets</button>
@@ -1015,6 +1016,12 @@
   </div>
 </div>
 
+<!-- v3 re-platform: full-screen host for the feet-native Layout Engine. -->
+<div id="engineHost" style="position:fixed;inset:0;z-index:900;display:none;background:#0c0f16">
+  <div id="engineRoot" style="position:absolute;inset:0"></div>
+  <button id="engineCloseBtn" title="Close the Layout Engine" style="position:absolute;top:7px;right:14px;z-index:20;background:#222a3b;color:#e7ecf5;border:1px solid #2f3a4f;border-radius:6px;padding:6px 12px;font-size:12px;cursor:pointer">✕ Close</button>
+</div>
+
 <script src="js/data.js?v=4"></script>
 <script src="js/state.js?v=4"></script>
 <script src="js/scoring.js?v=4"></script>
@@ -1041,6 +1048,10 @@
 <!-- Wall / floor-plan drawing editor (replaces the shape-based structural builder). -->
 <script src="js/walldraw.js?v=4"></script>
 <script src="js/fpb_bridge.js?v=4"></script>
+<!-- v3 re-platform: feet-native Layout Engine + native simulations, mounted on demand. -->
+<script src="js/engine.js?v=4"></script>
+<script src="js/engine_sim.js?v=4"></script>
+<script src="js/engine_rules.js?v=4"></script>
 <!-- Optimize Layout (constrained simulated annealing). -->
 <script src="js/optimize.js?v=4"></script>
 <!-- Measurement tool for the Layout Builder. -->

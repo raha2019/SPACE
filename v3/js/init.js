@@ -16,6 +16,7 @@ function init(){
   if(typeof wireWallDraw === "function") wireWallDraw();
   if(typeof wireFpbBridge === "function") wireFpbBridge();
   if(typeof wireMeasureTool === "function") wireMeasureTool();
+  wireLayoutEngine();
   if(typeof wireLeftColResizer === "function") wireLeftColResizer();
   if(typeof initDashboard === "function") initDashboard();
   applySidebarVisibility();
@@ -39,4 +40,21 @@ function init(){
   evaluate();
   render();
 }
+/* v3 re-platform: open/close the feet-native Layout Engine (Phase 1 preview). */
+function wireLayoutEngine(){
+  const openBtn = document.getElementById("engineOpenBtn");
+  const host = document.getElementById("engineHost");
+  const closeBtn = document.getElementById("engineCloseBtn");
+  if(openBtn && host){
+    openBtn.addEventListener("click", () => {
+      host.style.display = "block";
+      if(!host._engMounted && window.Engine){ Engine.mount("engineRoot"); host._engMounted = true; }
+      else if(window.Engine){ Engine.refreshPalette && Engine.refreshPalette(); Engine.render(); }
+    });
+  }
+  if(closeBtn && host){
+    closeBtn.addEventListener("click", () => { host.style.display = "none"; });
+  }
+}
+
 window.addEventListener("DOMContentLoaded", init);
